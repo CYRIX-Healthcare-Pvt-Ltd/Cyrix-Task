@@ -292,12 +292,17 @@ const STEP_TONE: Record<Exclude<Step, 'view'>, Tone> = {
 function CriticalityRow({ task: t, manage, owner }: { task: Task; manage: boolean; owner: string }) {
   const act = useTaskAction()
   const [error, setError] = useState<string | null>(null)
-  const canChange = manage ? t.status !== 'approved' : t.status === 'open'
+  // Once the manager has set it, it is the manager's to change (mt_0004; the user, 5 Oct).
+  const setByManager = !manage && !!t.criticality_set_by
+  const canChange = manage ? t.status !== 'approved' : t.status === 'open' && !setByManager
   if (!canChange) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="label !mb-0">How critical</span>
         <CritPill value={t.criticality} />
+        {setByManager && t.status === 'open' && (
+          <span className="text-xs text-ink-500">Set by {t.criticality_set_by}, so only {t.criticality_set_by} can change it</span>
+        )}
       </div>
     )
   }

@@ -4,7 +4,7 @@ import type { Task } from '@/lib/tasks'
 
 const task = (o: Partial<Task>): Task => ({
   id: Math.random().toString(36).slice(2), employee_id: 'e1', employee_name: 'Amal - Test', employee_ecode: 'E7777',
-  title: 'A task', details: null, due_on: '2026-10-05', criticality: 'moderate', status: 'open',
+  title: 'A task', details: null, due_on: '2026-10-05', criticality: 'moderate', criticality_set_by: null, status: 'open',
   done_note: null, done_at: null, approved_at: null, approved_by_name: null,
   created_at: '2026-10-05T04:00:00Z', updated_at: '2026-10-05T04:00:00Z',
   reminders: 0, last_reminded_at: null, comments: 0, sent_back: 0, unseen: 0, unseen_kinds: null,

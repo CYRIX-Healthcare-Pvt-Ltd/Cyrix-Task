@@ -20,6 +20,8 @@ export interface Task {
   /** "2026-10-07" */
   due_on: string
   criticality: Criticality
+  /** The first name of the manager who last changed how critical it is; null while it is the person's own choice. Once set, only the manager changes it (mt_0004). */
+  criticality_set_by: string | null
   status: TaskStatus
   /** What they did to complete it — required when they mark it complete. */
   done_note: string | null
