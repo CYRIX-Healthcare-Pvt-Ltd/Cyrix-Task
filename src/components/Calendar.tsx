@@ -15,10 +15,12 @@ const LOOK_WORD: Record<Look, string> = { todo: 'to do', overdue: 'overdue', wai
  *
  * Each day carries a dot for each kind of task due on it — red overdue,
  * blue to do, amber waiting for approval, green approved — so a glance at
- * the month says where the work is. Pressing a day shows its tasks.
+ * the month says where the work is. Pressing a day shows its tasks; while
+ * days from one to another are being chosen, they are shaded, the first
+ * and the last dark.
  */
 export default function Calendar({
-  month, onMonth, selected, onSelect, looks, counts, now,
+  month, onMonth, selected, onSelect, looks, counts, now, range = null,
 }: {
   /** "2026-10" */
   month: string
@@ -29,6 +31,8 @@ export default function Calendar({
   looks: Map<string, Set<Look>>
   counts: Map<string, number>
   now: string
+  /** The days chosen, from one to another, when that is what the list shows. */
+  range?: { from: string; to: string } | null
 }) {
   const days = monthGrid(month)
   const onThisMonth = monthOf(now) === month
@@ -38,7 +42,7 @@ export default function Calendar({
       <div className="flex items-center gap-2">
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-ink-900" aria-live="polite">{monthTitle(month)}</h2>
         {!onThisMonth && (
-          <button type="button" className="btn-press rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink-600 hover:bg-ink-100" onClick={() => { onMonth(monthOf(now)); onSelect(now) }}>
+          <button type="button" className="btn-press rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink-600 hover:bg-ink-100" onClick={() => { onMonth(monthOf(now)); if (!range) onSelect(now) }}>
             Today
           </button>
         )}
@@ -59,7 +63,10 @@ export default function Calendar({
         {days.map(day => {
           const inMonth = monthOf(day) === month
           const isToday = day === now
-          const isSelected = day === selected
+          const inRange = !!range && day >= range.from && day <= range.to
+          // The first and last of the days chosen look as a day pressed does; the days between are shaded.
+          const isSelected = day === selected || (inRange && (day === range.from || day === range.to))
+          const between = inRange && !isSelected
           const here = LOOK_ORDER.filter(l => looks.get(day)?.has(l))
           const n = counts.get(day) ?? 0
           const said = `${new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}${isToday ? ', today' : ''}${n ? `, ${n} task${n === 1 ? '' : 's'}${here.length ? ` (${here.map(l => LOOK_WORD[l]).join(', ')})` : ''}` : ''}`
@@ -68,13 +75,14 @@ export default function Calendar({
               key={day}
               type="button"
               onClick={() => onSelect(day)}
-              aria-pressed={isSelected}
+              aria-pressed={isSelected || between}
               aria-label={said}
               className={clsx(
                 'cal-day flex h-12 flex-col items-center justify-start gap-1 rounded-lg pt-1.5 text-sm tabular-nums sm:h-14 sm:pt-2',
                 isSelected ? 'bg-ink-900 font-semibold text-onInk'
                   : isToday ? 'font-bold text-cyrixRed-600'
                   : inMonth ? 'text-ink-800' : 'text-ink-300',
+                between && 'bg-ink-100',
               )}
             >
               <span className={clsx('grid h-6 min-w-6 place-items-center rounded-full leading-none', isToday && !isSelected && 'ring-1 ring-cyrixRed-600/40')}>

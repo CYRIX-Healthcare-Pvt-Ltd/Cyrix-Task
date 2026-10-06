@@ -4,10 +4,10 @@ import type { Task } from '@/lib/tasks'
 
 const task = (o: Partial<Task>): Task => ({
   id: Math.random().toString(36).slice(2), employee_id: 'e1', employee_name: 'Amal - Test', employee_ecode: 'E7777',
-  title: 'A task', details: null, due_on: '2026-10-05', criticality: 'moderate', criticality_set_by: null, status: 'open',
+  title: 'A task', details: null, due_on: '2026-10-05', due_set_by: null, criticality: 'moderate', criticality_set_by: null, status: 'open',
   done_note: null, done_at: null, approved_at: null, approved_by_name: null,
   created_at: '2026-10-05T04:00:00Z', updated_at: '2026-10-05T04:00:00Z',
-  reminders: 0, last_reminded_at: null, comments: 0, sent_back: 0, unseen: 0, unseen_kinds: null,
+  reminders: 0, last_reminded_at: null, comments: 0, sent_back: 0, reopened: 0, unseen: 0, unseen_kinds: null,
   ...o,
 })
 
@@ -37,6 +37,25 @@ describe('the dashboard', () => {
   it('lists people with the most pending first', () => {
     const rows = byPerson([...tasks, task({ employee_id: 'e2', employee_name: 'Nivek - Test', employee_ecode: 'E6666', status: 'done', done_note: 'x', done_at: '2026-10-05T05:00:00Z' })], now)
     expect(rows.map(r => r.ecode)).toEqual(['E7777', 'E6666'])
+  })
+
+  // The user, 6 Oct: "if i submitted today and manager approved 2mrw, then tat should be till today,
+  // if rejected only it will consider real time".
+  it('TAT stops when the task is marked complete, however late the manager approves it', () => {
+    const marked = task({ status: 'done', done_note: 'x', done_at: '2026-10-05T10:00:00Z' })
+    const approvedNextDay = { ...marked, status: 'approved' as const, approved_at: '2026-10-06T12:00:00Z', approved_by_name: 'Henry - Test' }
+    expect(figures([marked], now).avgHours).toBe(6)
+    expect(figures([approvedNextDay], now).avgHours).toBe(6)
+    expect(figures([approvedNextDay], now).onTime).toBe(1)
+  })
+
+  it('a task sent back counts until it is marked complete again', () => {
+    // Sent back, the completion is cleared: pending again, and no TAT yet.
+    const sentBack = task({ sent_back: 1 })
+    expect(figures([sentBack], now)).toMatchObject({ pending: 1, completed: 0, avgHours: null })
+    // Marked complete again the next day: the TAT runs from adding it to then, and it is a day late.
+    const doneAgain = task({ sent_back: 1, status: 'done', done_note: 'x', done_at: '2026-10-06T04:00:00Z' })
+    expect(figures([doneAgain], now)).toMatchObject({ completed: 1, avgHours: 24, onTime: 0 })
   })
 
   it('says completion time in minutes, hours or days', () => {

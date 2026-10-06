@@ -35,7 +35,10 @@ export interface Figures {
   completed: number
   waiting: number
   approved: number
-  /** On average, from being added to being marked complete; null with nothing completed. */
+  /**
+   * On average, from being added to being marked complete; null with nothing completed. Approval adds
+   * nothing; a send-back or a reopening clears done_at, so the time runs on until it is completed again.
+   */
   avgHours: number | null
   /** Completed on or before the due date. */
   onTime: number

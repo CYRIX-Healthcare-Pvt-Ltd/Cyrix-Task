@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  ArrowLeft, BadgeCheck, BellRing, CheckCircle2, Circle, Clock3, MessageSquare, Gauge, Pencil, Plus, Send, Trash2, Undo2,
+  ArrowLeft, BadgeCheck, BellRing, CalendarClock, CheckCircle2, Circle, Clock3, MessageSquare, Gauge, Pencil, Plus, RotateCcw, Send, Trash2, Undo2,
   type LucideIcon,
 } from 'lucide-react'
 import Dialog from '@/components/Dialog'
@@ -9,7 +9,7 @@ import { CritPicker, CritPill, critOf } from '@/components/Criticality'
 import IconChip from '@/components/IconChip'
 import { Alert, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
-import { TaskFields, fieldsProblem, type Fields } from '@/components/TaskForm'
+import { DueField, TaskFields, dueProblem, fieldsProblem, type Fields } from '@/components/TaskForm'
 import type { Opening } from '@/components/TaskRow'
 import { useAuth } from '@/contexts/AuthContext'
 import { TONE_CLASS, type Tone } from '@/lib/tones'
@@ -19,11 +19,11 @@ import {
   type Action, type Criticality, type EventKind, type Look, type Me, type Task, type TaskEvent,
 } from '@/lib/tasks'
 
-type Step = 'view' | 'complete' | 'edit' | 'remind' | 'approve' | 'sendback' | 'delete'
+type Step = 'view' | 'complete' | 'edit' | 'remind' | 'due' | 'approve' | 'sendback' | 'reopen' | 'delete'
 
 const STEP_TITLE: Record<Exclude<Step, 'view'>, string> = {
-  complete: 'Mark complete', edit: 'Change the task', remind: 'Send a reminder',
-  approve: 'Approve', sendback: 'Send back', delete: 'Delete the task',
+  complete: 'Mark complete', edit: 'Change the task', remind: 'Send a reminder', due: 'Change the due date',
+  approve: 'Approve', sendback: 'Send back', reopen: 'Reopen the task', delete: 'Delete the task',
 }
 
 const LOOK_ICON: Record<Look, [LucideIcon, Tone, string]> = {
@@ -37,12 +37,16 @@ const EVENT: Record<EventKind, [LucideIcon, Tone, string]> = {
   created: [Plus, 'slate', 'added the task'],
   edited: [Pencil, 'slate', 'changed the task'],
   criticality: [Gauge, 'orange', 'changed how critical it is'],
+  due: [CalendarClock, 'sky', 'changed the due date'],
   comment: [MessageSquare, 'indigo', 'commented'],
   reminder: [BellRing, 'violet', 'sent a reminder'],
   done: [CheckCircle2, 'amber', 'marked it complete'],
   sent_back: [Undo2, 'rose', 'sent it back'],
   approved: [BadgeCheck, 'green', 'approved it'],
+  reopened: [RotateCcw, 'orange', 'reopened it'],
 }
+/** A step this version does not know yet — one a later version added — still shows, plainly. */
+const OTHER_EVENT: [LucideIcon, Tone, string] = [Pencil, 'slate', 'changed the task']
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
@@ -52,8 +56,10 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
  *
  * The person whose task it is marks it complete (saying what they did) or
  * changes it while it is to do. Their reporting manager sends a reminder,
- * approves it or sends it back, and may delete it. Either writes a comment.
- * Each action is a step inside the same window, with Back to the task.
+ * changes the due date, approves it or sends it back, reopens it once
+ * approved, and may delete it. Both comment while it is to do; once the
+ * person marks it complete, only the manager does (mt_0005). Each action
+ * is a step inside the same window, with Back to the task.
  */
 export default function TaskDialog({
   task: t, manage, me, opening = 'view', onClose,
@@ -121,7 +127,6 @@ export default function TaskDialog({
         <>
           <div className="flex flex-wrap items-center gap-1.5">
             <Chip tone={lookTone}>{look === 'waiting' ? (manage ? 'Waiting for your approval' : manager ? `Waiting for ${manager}’s approval` : lookWord) : lookWord}</Chip>
-            <Chip tone={look === 'overdue' ? 'red' : 'slate'}>Due {dayTitle(t.due_on, now)}</Chip>
             {look === 'overdue' && <Chip tone="red">{plural(late, 'day')} overdue</Chip>}
             {t.status !== 'open' && late > 0 && <Chip tone="orange">Done {plural(late, 'day')} late</Chip>}
             {t.status === 'open' && t.reminders > 0 && <Chip tone="violet"><BellRing className="h-3 w-3" aria-hidden /> Reminded {plural(t.reminders, 'time')}</Chip>}
@@ -130,6 +135,7 @@ export default function TaskDialog({
           {manage && <p className="text-sm text-ink-600">Entered by <span className="font-semibold text-ink-900">{t.employee_name}</span> · {t.employee_ecode}</p>}
 
           <CriticalityRow task={t} manage={manage} owner={owner} />
+          <DueRow task={t} manage={manage} overdue={look === 'overdue'} now={now} onChange={() => go('due')} />
 
           {t.details
             ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-800">{t.details}</p>
@@ -179,9 +185,16 @@ export default function TaskDialog({
                 </button>
               </>
             )}
+            {/* Approved was final; now the manager can bring it back (the user, 6 Oct: "manager can reopen task even if it is completed"). */}
+            {manage && t.status === 'approved' && (
+              <button type="button" className="btn-secondary" onClick={() => go('reopen')}>
+                <RotateCcw className="h-4 w-4 text-orange-600" /> Reopen
+              </button>
+            )}
           </div>
 
-          <History task={t} manage={manage} myId={employee?.id ?? null} owner={owner} manager={manager} />
+          {/* Once the person marks it complete it is with the manager, and the person's comments close (the user, 6 Oct). */}
+          <History task={t} manage={manage} canComment={manage || t.status === 'open'} myId={employee?.id ?? null} owner={owner} manager={manager} />
 
           {manage && (
             <div className="border-t border-ink-100 pt-3">
@@ -212,6 +225,12 @@ export default function TaskDialog({
       {step === 'edit' && (
         <EditForm task={t} now={now} busy={act.isPending} error={error} onBack={() => go('view')}
           onSubmit={async f => { if (await run({ fn: 'task_edit', args: { p_task_id: t.id, p_title: f.title, p_details: f.details, p_due_on: f.due } }, 'Task changed')) go('view') }}
+        />
+      )}
+
+      {step === 'due' && (
+        <DueForm task={t} now={now} owner={owner} busy={act.isPending} error={error} onBack={() => go('view')}
+          onSubmit={async day => { if (await run({ fn: 'task_set_due', args: { p_task_id: t.id, p_due_on: day } }, `Due ${dayInSentence(day, now)} — ${owner} sees the change`)) go('view') }}
         />
       )}
 
@@ -257,6 +276,14 @@ export default function TaskDialog({
         />
       )}
 
+      {step === 'reopen' && (
+        <ReopenForm task={t} now={now} owner={owner} busy={act.isPending} error={error} onBack={() => go('view')}
+          onSubmit={async (note, due) => {
+            if (await run({ fn: 'task_reopen', args: { p_task_id: t.id, p_note: note, p_due_on: due === t.due_on ? null : due } }, `Reopened — ${owner} has it to do again`)) onClose()
+          }}
+        />
+      )}
+
       {step === 'delete' && (
         <>
           <Alert kind="warning" title="It goes for good">
@@ -279,10 +306,10 @@ export default function TaskDialog({
 }
 
 const STEP_ICON: Record<Exclude<Step, 'view'>, LucideIcon> = {
-  complete: CheckCircle2, edit: Pencil, remind: BellRing, approve: BadgeCheck, sendback: Undo2, delete: Trash2,
+  complete: CheckCircle2, edit: Pencil, remind: BellRing, due: CalendarClock, approve: BadgeCheck, sendback: Undo2, reopen: RotateCcw, delete: Trash2,
 }
 const STEP_TONE: Record<Exclude<Step, 'view'>, Tone> = {
-  complete: 'green', edit: 'slate', remind: 'violet', approve: 'green', sendback: 'rose', delete: 'red',
+  complete: 'green', edit: 'slate', remind: 'violet', due: 'sky', approve: 'green', sendback: 'rose', reopen: 'orange', delete: 'red',
 }
 
 /**
@@ -320,6 +347,37 @@ function CriticalityRow({ task: t, manage, owner }: { task: Task; manage: boolea
       <span className="label !mb-0" id={`crit-${t.id}`}>How critical</span>
       <CritPicker value={t.criticality} onChange={c => { void change(c) }} disabled={act.isPending} labelledBy={`crit-${t.id}`} />
       {error && <Alert kind="error">{error}</Alert>}
+    </div>
+  )
+}
+
+/**
+ * When it is due. The person moves it with Change while it is to do; the
+ * manager changes it here whenever it is not approved, and when reopening
+ * it. Once the manager has, it is theirs to change (mt_0005; the user,
+ * 6 Oct: "once manager is changing the due date then the emp cannot change
+ * it but manager can change anytime").
+ */
+function DueRow({ task: t, manage, overdue, now, onChange }: {
+  task: Task; manage: boolean; overdue: boolean; now: string; onChange: () => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="label !mb-0">Due date</span>
+      <span className={clsx('text-sm font-semibold', overdue ? 'text-cyrixRed-700' : 'text-ink-900')}>{dayTitle(t.due_on, now)}</span>
+      {manage && t.status !== 'approved' && (
+        <button
+          type="button"
+          onClick={onChange}
+          aria-label="Change the due date"
+          className="btn-press inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-ink-600 hover:bg-ink-100 hover:text-ink-900"
+        >
+          <CalendarClock className="h-4 w-4" aria-hidden /> Change
+        </button>
+      )}
+      {!manage && t.due_set_by && t.status === 'open' && (
+        <span className="text-xs text-ink-500">Set by {t.due_set_by}, so only {t.due_set_by} can change it</span>
+      )}
     </div>
   )
 }
@@ -378,9 +436,10 @@ function EditForm({ task: t, now, busy, error, onBack, onSubmit }: {
 }) {
   const [f, setF] = useState<Fields>({ title: t.title, details: t.details ?? '', due: t.due_on })
   const problem = fieldsProblem(f, now, f.due === t.due_on)
+  // noValidate: the box's own check would refuse an overdue task's date left as it is; fieldsProblem says what is wrong instead.
   return (
-    <form onSubmit={e => { e.preventDefault(); if (!problem) onSubmit(f) }} className="space-y-4">
-      <TaskFields value={f} onChange={setF} now={now} />
+    <form noValidate onSubmit={e => { e.preventDefault(); if (!problem) onSubmit(f) }} className="space-y-4">
+      <TaskFields value={f} onChange={setF} now={now} dueSetBy={t.due_set_by} />
       <p className="text-xs text-ink-500">What you change is kept in the task’s history.</p>
       {(error || (problem && f.title.trim())) && <Alert kind="error">{error ?? problem}</Alert>}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -393,9 +452,79 @@ function EditForm({ task: t, now, busy, error, onBack, onSubmit }: {
   )
 }
 
-/** Every step, oldest first, with who took it; and a box to comment at the end. */
-function History({ task: t, manage, myId, owner, manager }: {
-  task: Task; manage: boolean; myId: string | null; owner: string; manager: string
+/** The manager's new due date: from today to a year away. The person sees it, and it is the manager's from then on. */
+function DueForm({ task: t, now, owner, busy, error, onBack, onSubmit }: {
+  task: Task; now: string; owner: string; busy: boolean; error: string | null; onBack: () => void; onSubmit: (day: string) => void
+}) {
+  const [due, setDue] = useState(t.due_on)
+  const problem = due === t.due_on ? null : dueProblem(due, now)
+  return (
+    <form noValidate onSubmit={e => { e.preventDefault(); if (!problem && due !== t.due_on) onSubmit(due) }} className="space-y-4">
+      <DueField value={due} onChange={setDue} now={now} autoFocus />
+      <p className="text-xs leading-relaxed text-ink-500">{owner} sees the new date, marked new. From then on only you can change it.</p>
+      {(error || problem) && <Alert kind="error">{error ?? problem}</Alert>}
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <button type="button" className="btn-secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</button>
+        <button type="submit" className="btn-primary" disabled={busy || !!problem || due === t.due_on}>
+          {busy ? <Spinner className="h-4 w-4" /> : <CalendarClock className="h-4 w-4" />} Save due date
+        </button>
+      </div>
+    </form>
+  )
+}
+
+/** An approved task back to the person: why, and a new due date if they need more time. */
+function ReopenForm({ task: t, now, owner, busy, error, onBack, onSubmit }: {
+  task: Task; now: string; owner: string; busy: boolean; error: string | null; onBack: () => void; onSubmit: (note: string, due: string) => void
+}) {
+  const [note, setNote] = useState('')
+  const [due, setDue] = useState(t.due_on)
+  const moved = due !== t.due_on
+  const problem = moved ? dueProblem(due, now) : null
+  const ready = note.trim() !== '' && !problem
+  return (
+    <form noValidate onSubmit={e => { e.preventDefault(); if (ready) onSubmit(note.trim(), due) }} className="space-y-4">
+      {t.done_note && (
+        <div className="rounded-xl border border-green-200 bg-green-50 p-3.5">
+          <p className="label !mb-1">What {owner} did</p>
+          <p className="whitespace-pre-wrap break-words text-sm text-ink-900">{t.done_note}</p>
+        </div>
+      )}
+      <label className="block">
+        <span className="label">Why is it being reopened?</span>
+        <textarea
+          className="input min-h-[96px] resize-y"
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          placeholder="For example: the alarm is back on the ICU 2 monitor"
+          maxLength={2000}
+          rows={4}
+          required
+          data-autofocus
+        />
+      </label>
+      <DueField value={due} onChange={setDue} now={now} />
+      <p className="text-xs leading-relaxed text-ink-500">
+        {moved
+          ? `${owner} sees the reason and the new due date. From then on only you can change that date.`
+          : t.due_on < now
+            ? `${owner} sees the reason, and the task is to do again. It was due ${dayInSentence(t.due_on, now)}, so it is overdue unless you give it a new date.`
+            : `${owner} sees the reason, and the task is to do again.`}
+      </p>
+      {(error || problem) && <Alert kind="error">{error ?? problem}</Alert>}
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <button type="button" className="btn-secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</button>
+        <button type="submit" className="btn-primary" disabled={busy || !ready}>
+          {busy ? <Spinner className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />} Reopen
+        </button>
+      </div>
+    </form>
+  )
+}
+
+/** Every step, oldest first, with who took it; and, while the reader may write one, a box to comment at the end. */
+function History({ task: t, manage, canComment, myId, owner, manager }: {
+  task: Task; manage: boolean; canComment: boolean; myId: string | null; owner: string; manager: string
 }) {
   const { data, isLoading, error } = useHistory(t.id)
   const act = useTaskAction()
@@ -428,40 +557,43 @@ function History({ task: t, manage, myId, owner, manager }: {
           <li ref={listEnd} aria-hidden />
         </ol>
       )}
-      <form onSubmit={send} className="flex items-end gap-2">
-        <label className="min-w-0 flex-1">
-          <span className="sr-only">Comment to {to}</span>
-          <textarea
-            className="input min-h-[44px] resize-y"
-            rows={1}
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            placeholder={`Write to ${to}`}
-            maxLength={2000}
-            onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void send(e) }}
-          />
-        </label>
-        <button type="submit" className="btn-secondary h-[44px] shrink-0" disabled={act.isPending || !note.trim()} aria-label="Send the comment">
-          {act.isPending ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-          <span className="hidden sm:inline">Send</span>
-        </button>
-      </form>
+      {canComment && (
+        <form onSubmit={send} className="flex items-end gap-2">
+          <label className="min-w-0 flex-1">
+            <span className="sr-only">Comment to {to}</span>
+            <textarea
+              className="input min-h-[44px] resize-y"
+              rows={1}
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder={`Write to ${to}`}
+              maxLength={2000}
+              onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void send(e) }}
+            />
+          </label>
+          <button type="submit" className="btn-secondary h-[44px] shrink-0" disabled={act.isPending || !note.trim()} aria-label="Send the comment">
+            {act.isPending ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+            <span className="hidden sm:inline">Send</span>
+          </button>
+        </form>
+      )}
       {failed && <Alert kind="error">{failed}</Alert>}
     </section>
   )
 }
 
 function EventLine({ e, mine }: { e: TaskEvent; mine: boolean }) {
-  const [Icon, tone, verb] = EVENT[e.kind]
+  const [Icon, tone, verb] = EVENT[e.kind] ?? OTHER_EVENT
   const who = mine ? 'You' : firstName(e.by_name) || 'Someone'
-  if (e.kind === 'criticality' && e.note?.includes(' → ')) {
+  // "Henry changed it to Non-critical · was Critical"; "Henry changed the due date to 9 Oct 2026 · was 30 Sep 2026".
+  if ((e.kind === 'criticality' || e.kind === 'due') && e.note?.includes(' → ')) {
     const [from, to] = e.note.split(' → ')
     return (
       <li className="flex gap-3">
         <IconChip icon={Icon} tone={tone} className="mt-0.5" />
         <p className="min-w-0 flex-1 text-sm leading-snug">
           <span className="font-semibold text-ink-900">{who}</span>{' '}
-          <span className="text-ink-600">changed it to</span>{' '}
+          <span className="text-ink-600">{e.kind === 'due' ? 'changed the due date to' : 'changed it to'}</span>{' '}
           <span className="font-semibold text-ink-900">{to}</span>
           <span className="text-ink-500"> · was {from}</span>
           <span className="whitespace-nowrap text-xs text-ink-400"> · {dateTime(e.at)}</span>
@@ -481,7 +613,7 @@ function EventLine({ e, mine }: { e: TaskEvent; mine: boolean }) {
         {e.note && (
           <p className={clsx(
             'mt-1 whitespace-pre-wrap break-words text-sm',
-            e.kind === 'comment' || e.kind === 'reminder' || e.kind === 'sent_back' || e.kind === 'approved'
+            e.kind === 'comment' || e.kind === 'reminder' || e.kind === 'sent_back' || e.kind === 'approved' || e.kind === 'reopened'
               ? 'rounded-lg bg-ink-50 px-3 py-2 text-ink-800'
               : 'text-ink-700',
           )}>

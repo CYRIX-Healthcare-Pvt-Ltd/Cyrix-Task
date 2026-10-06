@@ -19,6 +19,8 @@ export interface Task {
   details: string | null
   /** "2026-10-07" */
   due_on: string
+  /** The first name of the manager who last changed the due date; null while it is the person's own. Once set, only the manager changes it (mt_0005). */
+  due_set_by: string | null
   criticality: Criticality
   /** The first name of the manager who last changed how critical it is; null while it is the person's own choice. Once set, only the manager changes it (mt_0004). */
   criticality_set_by: string | null
@@ -34,12 +36,14 @@ export interface Task {
   last_reminded_at: string | null
   comments: number
   sent_back: number
+  /** Times the manager reopened it after approving it. */
+  reopened: number
   /** Steps the other side took that this person has not opened yet. */
   unseen: number
   unseen_kinds: EventKind[] | null
 }
 
-export type EventKind = 'created' | 'edited' | 'criticality' | 'comment' | 'reminder' | 'done' | 'sent_back' | 'approved'
+export type EventKind = 'created' | 'edited' | 'criticality' | 'due' | 'comment' | 'reminder' | 'done' | 'sent_back' | 'approved' | 'reopened'
 
 export interface TaskEvent {
   id: string
@@ -227,6 +231,8 @@ export type Action =
   | { fn: 'task_add'; args: { p_title: string; p_details: string; p_due_on: string; p_criticality: Criticality } }
   | { fn: 'task_edit'; args: { p_task_id: string; p_title: string; p_details: string; p_due_on: string } }
   | { fn: 'task_set_criticality'; args: { p_task_id: string; p_criticality: Criticality } }
+  | { fn: 'task_set_due'; args: { p_task_id: string; p_due_on: string } }
+  | { fn: 'task_reopen'; args: { p_task_id: string; p_note: string; p_due_on: string | null } }
   | { fn: 'task_done'; args: { p_task_id: string; p_note: string } }
   | { fn: 'task_comment'; args: { p_task_id: string; p_note: string } }
   | { fn: 'task_remind'; args: { p_task_id: string; p_note: string | null } }

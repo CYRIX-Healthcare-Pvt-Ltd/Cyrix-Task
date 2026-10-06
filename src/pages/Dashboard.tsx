@@ -20,7 +20,9 @@ import {
  * A task counts in the month it is due. Pending and completed are as the
  * task stands now, so a month's total is always the two together.
  * Completion TAT is the time from adding a task to marking it complete;
- * on time is completed by the due date.
+ * on time is completed by the due date. The manager's approval adds
+ * nothing to it; a task sent back or reopened counts on until it is
+ * marked complete again (the user, 6 Oct).
  */
 export default function Dashboard() {
   const now = today()
@@ -175,7 +177,8 @@ export default function Dashboard() {
 
           <p className="text-xs leading-relaxed text-ink-500">
             A task counts in the month it is due. Pending is not yet marked complete; overdue is pending past its due date.
-            Completion TAT is the average time from adding a task to marking it complete; on time is completed by the due date.
+            Completion TAT is the average time from adding a task to marking it complete. The manager’s approval does not add to it;
+            a task sent back or reopened counts until it is marked complete again. On time is completed by the due date.
           </p>
         </>
       )}

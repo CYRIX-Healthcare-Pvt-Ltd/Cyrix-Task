@@ -13,8 +13,14 @@ export interface Fields { title: string; details: string; due: string }
 export function fieldsProblem(f: Fields, now: string, dueUnchanged = false): string | null {
   if (!f.title.trim()) return 'Give the task a name.'
   if (!f.due) return 'Choose the due date.'
-  if (!dueUnchanged && f.due < now) return 'The due date cannot be in the past.'
-  if (!dueUnchanged && f.due > addDays(now, 366)) return 'The due date is more than a year away — check the year.'
+  return dueUnchanged ? null : dueProblem(f.due, now)
+}
+
+/** What the database will refuse of a new due date. */
+export function dueProblem(due: string, now: string): string | null {
+  if (!due) return 'Choose the due date.'
+  if (due < now) return 'The due date cannot be in the past.'
+  if (due > addDays(now, 366)) return 'The due date is more than a year away — check the year.'
   return null
 }
 
@@ -25,9 +31,13 @@ export function fieldsProblem(f: Fields, now: string, dueUnchanged = false): str
  * box. There were Today and Tomorrow buttons beside it; on a task for the
  * 14th they read as if it were due today (the user, 5 Oct: "when i added a
  * task 14th, why due date is today and tomorrow"), so the date box is the
- * one way to move it.
+ * one way to move it. A due date the manager set is shown, not offered.
  */
-export function TaskFields({ value, onChange, now }: { value: Fields; onChange: (f: Fields) => void; now: string }) {
+export function TaskFields({ value, onChange, now, dueSetBy = null }: {
+  value: Fields; onChange: (f: Fields) => void; now: string
+  /** The manager who set the due date: then only they change it (mt_0005). */
+  dueSetBy?: string | null
+}) {
   const set = (k: keyof Fields) => (v: string) => onChange({ ...value, [k]: v })
   return (
     <>
@@ -54,29 +64,44 @@ export function TaskFields({ value, onChange, now }: { value: Fields; onChange: 
           placeholder="Anything that helps — where, for whom, what is needed"
         />
       </label>
-      <div>
-        <label className="block">
-          <span className="label">Due date</span>
-          <input
-            type="date"
-            className="input sm:w-64"
-            value={value.due}
-            min={now}
-            max={addDays(now, 366)}
-            onChange={e => set('due')(e.target.value)}
-            aria-describedby="due-words"
-            required
-          />
-        </label>
-        {/* The day in words: a date box writes 08-10-2026, and which day that is should not need working out. */}
-        {value.due && <p id="due-words" className="mt-1.5 text-xs font-medium text-ink-600">{dueWords(value.due, now)}</p>}
-      </div>
+      <DueField value={value.due} onChange={set('due')} now={now} setBy={dueSetBy} />
     </>
   )
 }
 
+/**
+ * The due date box, with the day in words under it: a date box writes
+ * 08-10-2026, and which day that is should not need working out. Set by
+ * the manager, it is shown greyed with who set it.
+ */
+export function DueField({ value, onChange, now, setBy = null, autoFocus = false }: {
+  value: string; onChange: (day: string) => void; now: string; setBy?: string | null; autoFocus?: boolean
+}) {
+  return (
+    <div>
+      <label className="block">
+        <span className="label">Due date</span>
+        <input
+          type="date"
+          className="input sm:w-64"
+          value={value}
+          min={now}
+          max={addDays(now, 366)}
+          onChange={e => onChange(e.target.value)}
+          aria-describedby="due-words"
+          disabled={!!setBy}
+          required
+          data-autofocus={autoFocus || undefined}
+        />
+      </label>
+      {value && <p id="due-words" className="mt-1.5 text-xs font-medium text-ink-600">{dueWords(value, now)}</p>}
+      {setBy && <p className="mt-1 text-xs text-ink-500">Set by {setBy}, so only {setBy} can change it</p>}
+    </div>
+  )
+}
+
 /** "Thursday, 8 October 2026 · in 3 days" */
-function dueWords(day: string, now: string): string {
+export function dueWords(day: string, now: string): string {
   const gap = daysBetween(now, day)
   const long = new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
   const when = gap === 0 ? 'today' : gap === 1 ? 'tomorrow' : gap > 1 ? `in ${gap} days` : gap === -1 ? 'yesterday' : `${-gap} days ago`

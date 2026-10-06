@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { BellRing, Check, CheckCircle2, Circle, Clock3, MessageSquare, Undo2 } from 'lucide-react'
+import { BellRing, Check, CheckCircle2, Circle, Clock3, MessageSquare, RotateCcw, Undo2 } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { CritPill } from '@/components/Criticality'
 import { TONE_CLASS } from '@/lib/tones'
@@ -10,8 +10,8 @@ export type Opening = 'view' | 'complete' | 'remind' | 'approve'
 
 /** The newest thing the other side did, said in a word or two. */
 const NEW_WORD: Array<[EventKind, string]> = [
-  ['reminder', 'New reminder'], ['sent_back', 'Sent back to you'], ['done', 'Just completed'],
-  ['criticality', 'Criticality changed'], ['comment', 'New comment'], ['approved', 'Just approved'],
+  ['reminder', 'New reminder'], ['sent_back', 'Sent back to you'], ['reopened', 'Reopened'], ['done', 'Just completed'],
+  ['criticality', 'Criticality changed'], ['due', 'Due date changed'], ['comment', 'New comment'], ['approved', 'Just approved'],
 ]
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
@@ -108,6 +108,9 @@ export default function TaskRow({
           {t.status !== 'open' && late > 0 && <span className={clsx(chip, TONE_CLASS.orange)}>Done {plural(late, 'day')} late</span>}
           {t.status === 'open' && t.sent_back > 0 && !newWord?.startsWith('Sent back') && (
             <span className={clsx(chip, TONE_CLASS.rose)}><Undo2 className="h-3 w-3" aria-hidden />Sent back</span>
+          )}
+          {t.status === 'open' && t.reopened > 0 && newWord !== 'Reopened' && (
+            <span className={clsx(chip, TONE_CLASS.orange)}><RotateCcw className="h-3 w-3" aria-hidden />Reopened</span>
           )}
           {t.status === 'open' && t.reminders > 0 && (
             <span className={clsx(chip, TONE_CLASS.violet)} title={`Reminded ${plural(t.reminders, 'time')}`}>
