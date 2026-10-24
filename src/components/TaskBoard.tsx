@@ -166,7 +166,8 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
         )}
       </div>
 
-      {fresh.length > 0 && (
+      {/* Only on my own tasks: a manager of a hundred would get a wall of them (the user, 24 Oct); the table marks new ones with a dot. */}
+      {!manage && fresh.length > 0 && (
         <section className="rounded-xl border border-violet-200 bg-violet-50 p-4" aria-label={`New from ${other}`}>
           <div className="flex items-center gap-2.5">
             <IconChip icon={BellRing} tone="violet" />
