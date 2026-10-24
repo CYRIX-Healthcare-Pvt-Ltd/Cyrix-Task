@@ -52,6 +52,17 @@ export interface Task {
 /** The steps of progress, as the person picks them (the user, 24 Oct: "if selected in progress we can show 50%"). */
 export const PROGRESS: Array<[number, string]> = [[0, 'Not started'], [25, 'Started'], [50, 'In progress'], [75, 'Almost done']]
 export const progressWord = (p: number) => PROGRESS.find(([v]) => v === p)?.[1] ?? 'Not started'
+/** When an assigned task reaches the person: 9 AM, India, on its day (mt_0010). */
+export const releaseAt = (due: string) => Date.parse(`${due}T09:00:00+05:30`)
+/**
+ * Assigned for later and not yet with the person: the manager sees it as Scheduled; it counts in nothing until then
+ * (the user, 24 Oct: "show in pending, but for calculation don't use future tasks").
+ */
+export const isScheduled = (t: Pick<Task, 'assigned_by_name' | 'status' | 'due_on'>, at = Date.now()) =>
+  !!t.assigned_by_name && t.status === 'open' && at < releaseAt(t.due_on)
+/** "27 Oct, 9 AM" */
+export const releaseWords = (due: string) => `${shortDay(due)}, 9 AM`
+
 /** Approved for an assigned task; completed for one the person added, which needs no approval (mt_0007). */
 export const closedWord = (t: Pick<Task, 'assigned_by_name'>) => (t.assigned_by_name ? 'Approved' : 'Completed')
 

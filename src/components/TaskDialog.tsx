@@ -15,7 +15,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { TONE_CLASS, type Tone } from '@/lib/tones'
 import { dateTime } from '@/lib/when'
 import {
-  PROGRESS, closedWord, dayInSentence, dayTitle, daysLate, firstName, lookOf, today, useHistory, useTaskAction,
+  PROGRESS, closedWord, isScheduled, releaseWords, dayInSentence, dayTitle, daysLate, firstName, lookOf, today, useHistory, useTaskAction,
   type Action, type Criticality, type EventKind, type Look, type Me, type Task, type TaskEvent,
 } from '@/lib/tasks'
 
@@ -135,6 +135,7 @@ export default function TaskDialog({
             <Chip tone={lookTone}>{look === 'waiting'
               ? (manage ? `${owner} completed · waiting for your approval` : `Completed · waiting for ${assigner || manager || 'your manager'}’s approval`)
               : lookWord}</Chip>
+            {isScheduled(t) && <Chip tone="violet">Scheduled · {releaseWords(t.due_on)}</Chip>}
             {look === 'overdue' && <Chip tone="red">{plural(late, 'day')} overdue</Chip>}
             {t.status !== 'open' && late > 0 && <Chip tone="orange">Done {plural(late, 'day')} late</Chip>}
             {t.status === 'open' && t.reminders > 0 && <Chip tone="violet"><BellRing className="h-3 w-3" aria-hidden /> Reminded {plural(t.reminders, 'time')}</Chip>}
@@ -193,7 +194,7 @@ export default function TaskDialog({
                 {assigner ? `${assigner} approves it, or sends it back to you with a reason.` : manager ? `${manager} approves it, or sends it back to you with a reason.` : 'It waits for your reporting manager’s approval.'}
               </p>
             )}
-            {manage && t.status === 'open' && (
+            {manage && t.status === 'open' && !isScheduled(t) && (
               <button type="button" className="btn-secondary" onClick={() => go('remind')}>
                 <BellRing className="h-4 w-4 text-violet-500" /> Send reminder
               </button>

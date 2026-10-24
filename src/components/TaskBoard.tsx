@@ -9,7 +9,7 @@ import { AddTask } from '@/components/TaskForm'
 import AssignTask from '@/components/AssignTask'
 import { Alert, ChartLoader, EmptyState } from '@/components/ui'
 import {
-  CRIT_ORDER, LOOK_DOT, LOOK_ORDER, addDays, dayInSentence, firstName, lookOf, monthOf, monthTitle,
+  CRIT_ORDER, LOOK_DOT, LOOK_ORDER, addDays, dayInSentence, firstName, isScheduled, lookOf, monthOf, monthTitle,
   shortDay, today, useMe, usePeople, useTasks,
   type Person, type Range, type Task,
 } from '@/lib/tasks'
@@ -26,13 +26,15 @@ const PERIODS: Array<[Period, string]> = [['this', 'This month'], ['all', 'All t
 /** Given by the manager, or added by the person (the user, 24 Oct: "self assigned will be also there … how to filter it?"). */
 type Source = 'any' | 'assigned' | 'self'
 const SOURCES: Array<[Source, string]> = [['any', 'All'], ['assigned', 'Assigned'], ['self', 'Self-added']]
-type Stage = 'overdue' | 'notstarted' | 'started' | 'inprogress' | 'almost'
+type Stage = 'overdue' | 'notstarted' | 'started' | 'inprogress' | 'almost' | 'scheduled'
 const STAGES: Array<[Stage, string, string]> = [
   ['overdue', 'Overdue', LOOK_DOT.overdue],
   ['notstarted', 'Not started', 'bg-ink-400'],
   ['started', 'Started', 'bg-sky-300'],
   ['inprogress', 'In progress', LOOK_DOT.todo],
   ['almost', 'Almost done', 'bg-indigo-500'],
+  // Assigned for later: shown under Pending, counted in nothing until 9 AM on its day.
+  ['scheduled', 'Scheduled', 'bg-violet-500'],
 ]
 
 /** Whose tasks: mine, or — as their manager — my team's, everyone's or one person's. */
@@ -40,6 +42,7 @@ export type Whose = { team: false } | { team: true; person: Person | null }
 
 /** A task still to do, by its stage; overdue whatever its progress. */
 const stageOf = (t: Task, now: string): Stage => {
+  if (isScheduled(t)) return 'scheduled'
   if (lookOf(t, now) === 'overdue') return 'overdue'
   const p = t.progress ?? 0
   return p >= 75 ? 'almost' : p >= 50 ? 'inprogress' : p >= 25 ? 'started' : 'notstarted'
@@ -103,8 +106,9 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
 
   const { tally, stages } = useMemo(() => {
     const tally: Record<View, number> = { all: 0, pending: 0, approved: 0, waiting: 0 }
-    const stages: Record<Stage, number> = { overdue: 0, notstarted: 0, started: 0, inprogress: 0, almost: 0 }
+    const stages: Record<Stage, number> = { overdue: 0, notstarted: 0, started: 0, inprogress: 0, almost: 0, scheduled: 0 }
     for (const t of found) {
+      if (isScheduled(t)) { stages.scheduled++; continue }
       tally.all++
       if (t.status === 'open') { tally.pending++; stages[stageOf(t, now)]++ } else if (t.status === 'done') tally.waiting++; else tally.approved++
     }
@@ -112,12 +116,14 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
   }, [found, now])
 
   const list: Task[] = view === 'all'
-      ? [...found].sort(byLookThenDue(now))
+      ? found.filter(t => !isScheduled(t)).sort(byLookThenDue(now))
       : view === 'approved'
         ? found.filter(t => t.status === 'approved').sort((a, b) => (b.done_at ?? '').localeCompare(a.done_at ?? ''))
         : view === 'waiting'
           ? found.filter(t => t.status === 'done').sort((a, b) => (a.done_at ?? '').localeCompare(b.done_at ?? ''))
-          : found.filter(t => t.status === 'open' && (!stage || stageOf(t, now) === stage)).sort(byLookThenDue(now))
+          // Pending, with the scheduled ones at the end.
+          : found.filter(t => t.status === 'open' && (!stage || stageOf(t, now) === stage))
+            .sort((a, b) => Number(isScheduled(a)) - Number(isScheduled(b)) || byLookThenDue(now)(a, b))
   const fresh = tasks.filter(t => t.unseen > 0).sort(byDue)
   const openTask = open ? tasks.find(t => t.id === open.id) ?? null : null
 

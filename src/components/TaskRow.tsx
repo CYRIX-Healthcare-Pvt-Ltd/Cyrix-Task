@@ -3,7 +3,7 @@ import { BellRing, Check, CheckCircle2, Circle, Clock3, MessageSquare, RotateCcw
 import Avatar from '@/components/Avatar'
 import { CritPill } from '@/components/Criticality'
 import { TONE_CLASS } from '@/lib/tones'
-import { closedWord, daysLate, firstName, lookOf, progressWord, shortDay, type EventKind, type Task } from '@/lib/tasks'
+import { closedWord, daysLate, firstName, isScheduled, lookOf, progressWord, releaseWords, shortDay, type EventKind, type Task } from '@/lib/tasks'
 
 /** What a press on the row starts: the task itself, or straight into one of its actions. */
 export type Opening = 'view' | 'complete' | 'remind' | 'approve'
@@ -97,7 +97,9 @@ export default function TaskRow({
             </span>
           )}
           <CritPill value={t.criticality} />
-          {t.status === 'open' && t.progress === 0 && look !== 'overdue' && <span className={clsx(chip, TONE_CLASS.slate)}>Not started</span>}
+          {isScheduled(t)
+            ? <span className={clsx(chip, TONE_CLASS.violet)} title="The person sees it, and is told, at this time">Scheduled · {releaseWords(t.due_on)}</span>
+            : t.status === 'open' && t.progress === 0 && look !== 'overdue' && <span className={clsx(chip, TONE_CLASS.slate)}>Not started</span>}
           {showDue && <span className={clsx(chip, TONE_CLASS.slate)}>Due {shortDay(t.due_on)}</span>}
           {look === 'overdue' && <span className={clsx(chip, TONE_CLASS.red)}>Overdue · {plural(late, 'day')}</span>}
           {look === 'waiting' && (
@@ -141,7 +143,7 @@ export default function TaskRow({
         )}
       </div>
 
-      {manage && t.status === 'open' && (
+      {manage && t.status === 'open' && !isScheduled(t) && (
         <button
           type="button"
           onClick={() => onOpen(t, 'remind')}

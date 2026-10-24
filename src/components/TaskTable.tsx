@@ -5,7 +5,7 @@ import type { Opening } from '@/components/TaskRow'
 import { TONE_CLASS } from '@/lib/tones'
 import { tatWords } from '@/lib/stats'
 import { localDay } from '@/lib/when'
-import { closedWord, daysLate, firstName, lookOf, progressWord, shortDay, type Task } from '@/lib/tasks'
+import { closedWord, daysLate, firstName, isScheduled, lookOf, progressWord, releaseWords, shortDay, type Task } from '@/lib/tasks'
 
 /**
  * The tasks as a table, on a computer (the user, 24 Oct: "need this column wise, name with ecode, task, description,
@@ -45,7 +45,9 @@ export default function TaskTable({ tasks, manage, now, managerName, onOpen }: {
               const look = lookOf(t, now)
               const late = daysLate(t, now)
               const tat = t.done_at ? Math.max(0, Date.parse(t.done_at) - Date.parse(t.created_at)) / 3_600_000 : null
-              const status = look === 'approved'
+              const status = isScheduled(t)
+                ? <span className={clsx(chip, TONE_CLASS.violet)} title="The person sees it, and is told, at this time">Scheduled · {releaseWords(t.due_on)}</span>
+                : look === 'approved'
                 ? <span className={clsx(chip, TONE_CLASS.green)}>{closedWord(t)}</span>
                 : look === 'waiting'
                   ? <span className={clsx(chip, TONE_CLASS.amber)}>{manage ? 'Waiting for your approval' : `Waiting for ${firstName(t.assigned_by_name) || firstName(managerName) || 'approval'}`}</span>
@@ -85,7 +87,7 @@ export default function TaskTable({ tasks, manage, now, managerName, onOpen }: {
                     {manage && t.status === 'done' && (
                       <button type="button" onClick={() => onOpen(t, 'approve')} className="btn-press rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#15803d]">Approve</button>
                     )}
-                    {manage && t.status === 'open' && (
+                    {manage && t.status === 'open' && !isScheduled(t) && (
                       <button type="button" onClick={() => onOpen(t, 'remind')} className="btn-press inline-flex items-center gap-1 rounded-lg border border-ink-200 px-2.5 py-1.5 text-xs font-semibold text-ink-700 hover:bg-ink-50" title="Send a reminder">
                         <BellRing className="h-3.5 w-3.5 text-violet-500" aria-hidden /> Remind
                       </button>

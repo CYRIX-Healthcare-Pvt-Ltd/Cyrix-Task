@@ -7,7 +7,7 @@ import { CritPill } from '@/components/Criticality'
 import PersonSelect, { usePersonChoice } from '@/components/PersonSelect'
 import { Alert, ChartLoader } from '@/components/ui'
 import { TONE_TEXT, type Tone } from '@/lib/tones'
-import { monthOf, monthTitle, addDays, shortDay, today, useMe, useTasks } from '@/lib/tasks'
+import { monthOf, monthTitle, addDays, isScheduled, shortDay, today, useMe, useTasks } from '@/lib/tasks'
 import {
   PERIOD_WORD, byCriticality, byPerson, figures, inPeriod, onTimeShare, periodRange, tatWords, type Figures, type Period,
 } from '@/lib/stats'
@@ -40,7 +40,8 @@ export default function Dashboard() {
   const mine = useTasks({ from, to }, {}, !team)
   const theirs = useTasks({ from, to }, person ? { employeeId: person.id } : { team: true }, team)
   const q = team ? theirs : mine
-  const tasks = useMemo(() => (q.data ?? []).filter(t => inPeriod(t, { from, to })), [q.data, from, to])
+  // A task assigned for later counts once it reaches the person (9 AM on its day).
+  const tasks = useMemo(() => (q.data ?? []).filter(t => inPeriod(t, { from, to }) && !isScheduled(t)), [q.data, from, to])
   const all = figures(tasks, now)
   const crit = byCriticality(tasks, now)
   const persons = team && !person ? byPerson(tasks, now).filter(p => !find.trim() || `${p.name} ${p.ecode}`.toLowerCase().includes(find.trim().toLowerCase())) : []
@@ -146,7 +147,7 @@ export default function Dashboard() {
             <section className="card overflow-hidden">
               <div className="flex flex-wrap items-center gap-2.5 border-b border-ink-100 px-4 py-3">
                 <IconChip icon={Users} tone="teal" />
-                <h2 className="text-base font-semibold text-ink-900">By person</h2>
+                <h2 className="text-base font-semibold text-ink-900">By team members</h2>
                 <label className="relative ml-auto w-full sm:w-64">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" aria-hidden />
                   <input className="input !py-1.5 !pl-8" value={find} onChange={e => setFind(e.target.value)} placeholder="Name or E-code" aria-label="Find a person" />
