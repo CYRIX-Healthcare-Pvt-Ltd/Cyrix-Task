@@ -41,9 +41,21 @@ export interface Task {
   /** Steps the other side took that this person has not opened yet. */
   unseen: number
   unseen_kinds: EventKind[] | null
+  /** The manager who assigned it; null for a task the person added (mt_0007). Only an assigned task waits for approval. */
+  assigned_by_name: string | null
+  /** The manager's remarks on an assigned task. */
+  remarks: string | null
+  /** How far along a task still to do is: 0, 25, 50 or 75; completing it is 100. */
+  progress: number
 }
 
-export type EventKind = 'created' | 'edited' | 'criticality' | 'due' | 'comment' | 'reminder' | 'done' | 'sent_back' | 'approved' | 'reopened'
+/** The steps of progress, as the person picks them (the user, 24 Oct: "if selected in progress we can show 50%"). */
+export const PROGRESS: Array<[number, string]> = [[0, 'Not started'], [25, 'Started'], [50, 'In progress'], [75, 'Almost done']]
+export const progressWord = (p: number) => PROGRESS.find(([v]) => v === p)?.[1] ?? 'Not started'
+/** Approved for an assigned task; completed for one the person added, which needs no approval (mt_0007). */
+export const closedWord = (t: Pick<Task, 'assigned_by_name'>) => (t.assigned_by_name ? 'Approved' : 'Completed')
+
+export type EventKind = 'created' | 'edited' | 'criticality' | 'due' | 'comment' | 'reminder' | 'done' | 'sent_back' | 'approved' | 'reopened' | 'assigned' | 'progress'
 
 export interface TaskEvent {
   id: string
@@ -199,9 +211,19 @@ export function useTasks(range: Range, who: { employeeId?: string; team?: boolea
   return useQuery({
     enabled,
     queryKey: ['tasks', 'list', range.from, range.to, who.employeeId ?? null, !!who.team],
-    queryFn: () => call<Task[]>('task_list', {
-      p_from: range.from, p_to: range.to, p_employee_id: who.employeeId ?? null, p_team: !!who.team,
-    }),
+    // A thousand at a time: the server hands back at most 1,000 a call, and a team's tasks over time run past that.
+    queryFn: async () => {
+      const out: Task[] = []
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase.rpc('task_list', {
+          p_from: range.from, p_to: range.to, p_employee_id: who.employeeId ?? null, p_team: !!who.team,
+        }).range(from, from + 999)
+        if (error) throw new Error(friendlyError(error))
+        out.push(...((data ?? []) as Task[]))
+        if ((data ?? []).length < 1000) break
+      }
+      return out
+    },
     // Turning a month keeps the last one on screen until the next arrives.
     placeholderData: keepPreviousData,
   })
@@ -240,6 +262,8 @@ export type Action =
   | { fn: 'task_send_back'; args: { p_task_id: string; p_note: string } }
   | { fn: 'task_delete'; args: { p_task_id: string } }
   | { fn: 'task_seen'; args: { p_task_id: string } }
+  | { fn: 'task_progress'; args: { p_task_id: string; p_progress: number } }
+  | { fn: 'task_assign'; args: { p_people: string[]; p_title: string; p_details: string; p_due_on: string; p_criticality: Criticality; p_remarks: string } }
 
 /** Every change goes through one of the database's task functions, and then everything shown is read again. */
 export function useTaskAction() {

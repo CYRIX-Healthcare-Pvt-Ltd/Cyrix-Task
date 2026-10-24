@@ -24,11 +24,11 @@ export default function Team() {
     <TaskBoard
       whose={{ team: true, person }}
       heading={
-        <div className="w-full min-w-0 space-y-3">
+        <div className="min-w-0 flex-1 space-y-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-ink-900">My Team Task</h1>
             <p className="mt-0.5 text-sm text-ink-500">
-              The tasks your team entered, each with who entered it. Approve what is done, remind what is late.
+              Your team’s tasks, each with whose it is. Assign a task, approve what you assigned, remind what is late.
             </p>
           </div>
           <PersonSelect people={people} person={person} onChange={setPerson} />

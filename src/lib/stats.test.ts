@@ -8,6 +8,7 @@ const task = (o: Partial<Task>): Task => ({
   done_note: null, done_at: null, approved_at: null, approved_by_name: null,
   created_at: '2026-10-05T04:00:00Z', updated_at: '2026-10-05T04:00:00Z',
   reminders: 0, last_reminded_at: null, comments: 0, sent_back: 0, reopened: 0, unseen: 0, unseen_kinds: null,
+  assigned_by_name: null, remarks: null, progress: 0,
   ...o,
 })
 
@@ -73,10 +74,9 @@ describe('the dashboard', () => {
     expect(onTimeShare({ ...figures([], now), completed: 10, onTime: 6 }).tone).toBe('red')
   })
 
-  it('periods are calendar months, or all time', () => {
+  it('periods are this calendar month, all time, or the days chosen', () => {
     expect(periodRange('this', '2026-10-08')).toEqual({ from: '2026-10-01', to: '2026-10-31' })
-    expect(periodRange('last', '2026-10-08')).toEqual({ from: '2026-09-01', to: '2026-09-30' })
-    expect(periodRange('last', '2026-01-15')).toEqual({ from: '2025-12-01', to: '2025-12-31' })
+    expect(periodRange('range', '2026-10-08', { from: '2026-10-02', to: '2026-10-05' })).toEqual({ from: '2026-10-02', to: '2026-10-05' })
     expect(periodRange('all', '2026-10-08').from <= '2026-01-01').toBe(true)
   })
 })

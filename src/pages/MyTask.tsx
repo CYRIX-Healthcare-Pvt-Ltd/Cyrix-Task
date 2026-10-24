@@ -14,7 +14,7 @@ export default function MyTask() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-ink-900">My Task</h1>
           <p className="mt-0.5 text-sm text-ink-500">
-            Hello {firstName(employee?.full_name)}. Add your tasks on the day they are due; when one is done, mark it complete and say what you did{manager ? ` — ${manager} approves it` : ''}.
+            Hello {firstName(employee?.full_name)}. Add your tasks on the day they are due; when one is done, mark it complete and say what you did{manager ? `. Tasks ${manager} assigns wait for ${manager}’s approval` : ''}.
           </p>
         </div>
       }

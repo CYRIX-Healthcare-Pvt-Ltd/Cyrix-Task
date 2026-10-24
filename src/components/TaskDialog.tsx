@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  ArrowLeft, BadgeCheck, BellRing, CalendarClock, CheckCircle2, Circle, Clock3, MessageSquare, Gauge, Pencil, Plus, RotateCcw, Send, Trash2, Undo2,
+  ArrowLeft, BadgeCheck, BellRing, CalendarClock, CheckCircle2, Circle, Clock3, MessageSquare, Gauge, Pencil, Plus, RotateCcw, Send, Trash2, Undo2, UserPlus, TrendingUp,
   type LucideIcon,
 } from 'lucide-react'
 import Dialog from '@/components/Dialog'
@@ -15,7 +15,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { TONE_CLASS, type Tone } from '@/lib/tones'
 import { dateTime } from '@/lib/when'
 import {
-  dayInSentence, dayTitle, daysLate, firstName, lookOf, today, useHistory, useTaskAction,
+  PROGRESS, closedWord, dayInSentence, dayTitle, daysLate, firstName, lookOf, today, useHistory, useTaskAction,
   type Action, type Criticality, type EventKind, type Look, type Me, type Task, type TaskEvent,
 } from '@/lib/tasks'
 
@@ -44,6 +44,8 @@ const EVENT: Record<EventKind, [LucideIcon, Tone, string]> = {
   sent_back: [Undo2, 'rose', 'sent it back'],
   approved: [BadgeCheck, 'green', 'approved it'],
   reopened: [RotateCcw, 'orange', 'reopened it'],
+  assigned: [UserPlus, 'teal', 'assigned the task'],
+  progress: [TrendingUp, 'sky', 'updated the progress'],
 }
 /** A step this version does not know yet — one a later version added — still shows, plainly. */
 const OTHER_EVENT: [LucideIcon, Tone, string] = [Pencil, 'slate', 'changed the task']
@@ -105,7 +107,11 @@ export default function TaskDialog({
     }
   }
 
-  const [LookIcon, lookTone, lookWord] = LOOK_ICON[look]
+  const [LookIcon, lookTone, lookWord0] = LOOK_ICON[look]
+  // A task the person added is completed, not approved: it needs no approval (mt_0007).
+  const lookWord = look === 'approved' ? closedWord(t) : lookWord0
+  const assigned = !!t.assigned_by_name
+  const assigner = firstName(t.assigned_by_name)
   const title = step === 'view' ? t.title : STEP_TITLE[step]
 
   return (
@@ -126,13 +132,22 @@ export default function TaskDialog({
       {step === 'view' && (
         <>
           <div className="flex flex-wrap items-center gap-1.5">
-            <Chip tone={lookTone}>{look === 'waiting' ? (manage ? 'Waiting for your approval' : manager ? `Waiting for ${manager}’s approval` : lookWord) : lookWord}</Chip>
+            <Chip tone={lookTone}>{look === 'waiting'
+              ? (manage ? `${owner} completed · waiting for your approval` : `Completed · waiting for ${assigner || manager || 'your manager'}’s approval`)
+              : lookWord}</Chip>
             {look === 'overdue' && <Chip tone="red">{plural(late, 'day')} overdue</Chip>}
             {t.status !== 'open' && late > 0 && <Chip tone="orange">Done {plural(late, 'day')} late</Chip>}
             {t.status === 'open' && t.reminders > 0 && <Chip tone="violet"><BellRing className="h-3 w-3" aria-hidden /> Reminded {plural(t.reminders, 'time')}</Chip>}
           </div>
 
-          {manage && <p className="text-sm text-ink-600">Entered by <span className="font-semibold text-ink-900">{t.employee_name}</span> · {t.employee_ecode}</p>}
+          {manage && <p className="text-sm text-ink-600">{assigned ? 'Assigned to' : 'Entered by'} <span className="font-semibold text-ink-900">{t.employee_name}</span> · {t.employee_ecode}</p>}
+          {/* Given by the manager: who, and their remarks (mt_0007). */}
+          {assigned && (
+            <div className="rounded-xl border border-teal-200 bg-teal-50 px-3.5 py-2.5">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-teal-800"><UserPlus className="h-3.5 w-3.5" aria-hidden />Assigned by {t.assigned_by_name}</p>
+              {t.remarks && <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink-800">{t.remarks}</p>}
+            </div>
+          )}
 
           <CriticalityRow task={t} manage={manage} owner={owner} />
           <DueRow task={t} manage={manage} overdue={look === 'overdue'} now={now} onChange={() => go('due')} />
@@ -147,10 +162,15 @@ export default function TaskDialog({
               <p className="whitespace-pre-wrap break-words text-sm text-ink-900">{t.done_note}</p>
               <p className="mt-2 text-xs text-ink-500">
                 Marked complete {t.done_at ? dateTime(t.done_at) : ''}
-                {t.status === 'approved' && t.approved_at ? ` · approved by ${firstName(t.approved_by_name) || 'the manager'}, ${dateTime(t.approved_at)}` : ''}
+                {t.status === 'approved' && t.approved_at && assigned ? ` · approved by ${firstName(t.approved_by_name) || 'the manager'}, ${dateTime(t.approved_at)}` : ''}
               </p>
             </div>
           )}
+
+          {/* Progress: the person's; seen by the manager (the user, 24 Oct). */}
+          {t.status === 'open' && (manage
+            ? <ProgressShown value={t.progress} />
+            : <StatusPicker task={t} onCompleted={() => go('complete')} />)}
 
           {error && <Alert kind="error">{error}</Alert>}
 
@@ -160,14 +180,17 @@ export default function TaskDialog({
                 <button type="button" className="btn-primary" onClick={() => go('complete')}>
                   <CheckCircle2 className="h-4 w-4" /> Mark complete
                 </button>
-                <button type="button" className="btn-secondary" onClick={() => go('edit')}>
-                  <Pencil className="h-4 w-4" /> Change
-                </button>
+                {/* An assigned task is as the manager set it (mt_0007). */}
+                {!assigned && (
+                  <button type="button" className="btn-secondary" onClick={() => go('edit')}>
+                    <Pencil className="h-4 w-4" /> Change
+                  </button>
+                )}
               </>
             )}
             {!manage && t.status === 'done' && (
               <p className="text-sm text-ink-600">
-                {manager ? `${manager} approves it, or sends it back to you with a reason.` : 'It waits for your reporting manager’s approval.'}
+                {assigner ? `${assigner} approves it, or sends it back to you with a reason.` : manager ? `${manager} approves it, or sends it back to you with a reason.` : 'It waits for your reporting manager’s approval.'}
               </p>
             )}
             {manage && t.status === 'open' && (
@@ -211,11 +234,13 @@ export default function TaskDialog({
           label="What did you do to complete it?"
           placeholder="For example: checked the 14 PM dates with the hospital and sent the list"
           required minLength={3}
-          help={!me?.manager_name
-            ? 'Nobody is set as your reporting manager, so nobody can approve it. Tell HR.'
-            : me.manager_has_module
-              ? `It then waits for ${manager}’s approval.`
-              : `${manager} does not have My Task yet, so it waits for approval until the software administrator gives it to ${manager}.`}
+          help={!assigned
+            ? 'It is then complete.'
+            : !me?.manager_name
+              ? 'Nobody is set as your reporting manager, so nobody can approve it. Tell HR.'
+              : me.manager_has_module
+                ? `It then waits for ${assigner || manager}’s approval.`
+                : `${manager} does not have My Task yet, so it waits for approval until the software administrator gives it to ${manager}.`}
           button={<><CheckCircle2 className="h-4 w-4" /> Mark complete</>}
           busy={act.isPending} error={error} onBack={() => go('view')}
           onSubmit={async note => { if (await run({ fn: 'task_done', args: { p_task_id: t.id, p_note: note } }, 'Marked complete')) onClose() }}
@@ -384,6 +409,51 @@ function DueRow({ task: t, manage, overdue, now, onChange }: {
 
 function Chip({ tone, children }: { tone: Tone; children: ReactNode }) {
   return <span className={clsx('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium', TONE_CLASS[tone])}>{children}</span>
+}
+
+/** How far along it is, as the manager sees it: a bar and its word. */
+function ProgressShown({ value }: { value: number }) {
+  const word = PROGRESS.find(([v]) => v === value)?.[1] ?? 'Not started'
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="label !mb-0">Progress</span>
+        <span className="text-sm font-semibold tabular-nums text-ink-900">{word} · {value}%</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-ink-100"><div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: `${value}%` }} /></div>
+    </div>
+  )
+}
+
+/**
+ * The person's status (the user, 24 Oct): Not started, Started, In progress, Almost done — and Completed, which asks
+ * what they did and, for an assigned task, sends it to the manager for approval. An assigned task starts Not started.
+ */
+function StatusPicker({ task: t, onCompleted }: { task: Task; onCompleted: () => void }) {
+  const act = useTaskAction()
+  const [error, setError] = useState<string | null>(null)
+  const pick = async (p: number) => {
+    if (p === t.progress) return
+    setError(null)
+    try {
+      await act.mutateAsync({ fn: 'task_progress', args: { p_task_id: t.id, p_progress: p } })
+      toast(`${PROGRESS.find(([v]) => v === p)?.[1]} · ${p}%`)
+    } catch (e) { setError((e as Error).message) }
+  }
+  return (
+    <div className="space-y-2">
+      <label className="block">
+        <span className="label">Status</span>
+        <select className="input sm:w-72" value={String(t.progress)} disabled={act.isPending}
+          onChange={e => { if (e.target.value === 'done') onCompleted(); else void pick(Number(e.target.value)) }}>
+          {PROGRESS.map(([v, word]) => <option key={v} value={v}>{word} · {v}%</option>)}
+          <option value="done">Completed · 100%</option>
+        </select>
+      </label>
+      <div className="h-2 overflow-hidden rounded-full bg-ink-100 sm:w-72"><div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: `${t.progress}%` }} /></div>
+      {error && <Alert kind="error">{error}</Alert>}
+    </div>
+  )
 }
 
 /** One box to write in and the button that sends it — every action that carries words. */
@@ -613,7 +683,7 @@ function EventLine({ e, mine }: { e: TaskEvent; mine: boolean }) {
         {e.note && (
           <p className={clsx(
             'mt-1 whitespace-pre-wrap break-words text-sm',
-            e.kind === 'comment' || e.kind === 'reminder' || e.kind === 'sent_back' || e.kind === 'approved' || e.kind === 'reopened'
+            e.kind === 'comment' || e.kind === 'reminder' || e.kind === 'sent_back' || e.kind === 'approved' || e.kind === 'reopened' || e.kind === 'assigned'
               ? 'rounded-lg bg-ink-50 px-3 py-2 text-ink-800'
               : 'text-ink-700',
           )}>

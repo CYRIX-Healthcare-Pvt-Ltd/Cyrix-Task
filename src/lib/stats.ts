@@ -1,5 +1,5 @@
 import { localDay } from '@/lib/when'
-import { CRIT_ORDER, addMonths, lookOf, monthOf, type Criticality, type Task } from '@/lib/tasks'
+import { CRIT_ORDER, lookOf, monthOf, type Criticality, type Task } from '@/lib/tasks'
 
 /**
  * The dashboard's figures, worked out from the tasks themselves.
@@ -10,14 +10,16 @@ import { CRIT_ORDER, addMonths, lookOf, monthOf, type Criticality, type Task } f
  * window.
  */
 
-export type Period = 'this' | 'last' | 'all'
+export type Period = 'this' | 'all' | 'range'
 
-export const PERIOD_WORD: Record<Period, string> = { this: 'This month', last: 'Last month', all: 'All time' }
+/** This month, all time, or the days chosen (the user, 24 Oct: "this month all time then from to"). */
+export const PERIOD_WORD: Record<Period, string> = { this: 'This month', all: 'All time', range: 'From – To' }
 
 /** The first and last day of the period: "2026-10-01" to "2026-10-31". */
-export function periodRange(p: Period, now: string): { from: string; to: string } {
+export function periodRange(p: Period, now: string, chosen?: { from: string; to: string }): { from: string; to: string } {
   if (p === 'all') return { from: '2000-01-01', to: '2999-12-31' }
-  const month = p === 'this' ? monthOf(now) : addMonths(monthOf(now), -1)
+  if (p === 'range' && chosen) return chosen
+  const month = monthOf(now)
   const [y, m] = month.split('-').map(Number)
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
   return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` }
@@ -31,6 +33,10 @@ export interface Figures {
   pending: number
   /** Pending, and past the due date. */
   overdue: number
+  /** Pending, not overdue, and started — progress above 0 (mt_0007). */
+  inProgress: number
+  /** Pending, not overdue, not started yet. */
+  notStarted: number
   /** Marked complete: waiting for approval, or approved. */
   completed: number
   waiting: number
@@ -45,13 +51,15 @@ export interface Figures {
 }
 
 export function figures(tasks: Task[], now: string): Figures {
-  const f: Figures = { total: 0, pending: 0, overdue: 0, completed: 0, waiting: 0, approved: 0, avgHours: null, onTime: 0 }
+  const f: Figures = { total: 0, pending: 0, overdue: 0, inProgress: 0, notStarted: 0, completed: 0, waiting: 0, approved: 0, avgHours: null, onTime: 0 }
   let hours = 0
   for (const t of tasks) {
     f.total++
     if (t.status === 'open') {
       f.pending++
       if (lookOf(t, now) === 'overdue') f.overdue++
+      else if ((t.progress ?? 0) > 0) f.inProgress++
+      else f.notStarted++
       continue
     }
     f.completed++
@@ -71,13 +79,14 @@ export function byCriticality(tasks: Task[], now: string): Array<[Criticality, F
 
 export interface PersonFigures { id: string; name: string; ecode: string; f: Figures }
 
-/** One row per person who has a task in the period, most pending first. */
+/** One row per person who has a task in the period, the most overdue first. */
 export function byPerson(tasks: Task[], now: string): PersonFigures[] {
   const groups = new Map<string, Task[]>()
   for (const t of tasks) groups.set(t.employee_id, [...(groups.get(t.employee_id) ?? []), t])
   return [...groups.values()]
     .map(ts => ({ id: ts[0].employee_id, name: ts[0].employee_name, ecode: ts[0].employee_ecode, f: figures(ts, now) }))
-    .sort((a, b) => b.f.pending - a.f.pending || b.f.overdue - a.f.overdue || a.name.localeCompare(b.name))
+    // The most overdue first: who needs a word today (the user, 24 Oct).
+    .sort((a, b) => b.f.overdue - a.f.overdue || b.f.pending - a.f.pending || a.name.localeCompare(b.name))
 }
 
 /** "45 min", "5 h", "1.5 days". */

@@ -1,16 +1,16 @@
 import clsx from 'clsx'
-import { BellRing, Check, CheckCircle2, Circle, Clock3, MessageSquare, RotateCcw, Undo2 } from 'lucide-react'
+import { BellRing, Check, CheckCircle2, Circle, Clock3, MessageSquare, RotateCcw, Undo2, UserPlus } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import { CritPill } from '@/components/Criticality'
 import { TONE_CLASS } from '@/lib/tones'
-import { daysLate, firstName, lookOf, shortDay, type EventKind, type Task } from '@/lib/tasks'
+import { closedWord, daysLate, firstName, lookOf, progressWord, shortDay, type EventKind, type Task } from '@/lib/tasks'
 
 /** What a press on the row starts: the task itself, or straight into one of its actions. */
 export type Opening = 'view' | 'complete' | 'remind' | 'approve'
 
 /** The newest thing the other side did, said in a word or two. */
 const NEW_WORD: Array<[EventKind, string]> = [
-  ['reminder', 'New reminder'], ['sent_back', 'Sent back to you'], ['reopened', 'Reopened'], ['done', 'Just completed'],
+  ['assigned', 'New task for you'], ['reminder', 'New reminder'], ['sent_back', 'Sent back to you'], ['reopened', 'Reopened'], ['done', 'Just completed'],
   ['criticality', 'Criticality changed'], ['due', 'Due date changed'], ['comment', 'New comment'], ['approved', 'Just approved'],
 ]
 
@@ -97,14 +97,21 @@ export default function TaskRow({
             </span>
           )}
           <CritPill value={t.criticality} />
+          {t.status === 'open' && t.progress === 0 && look !== 'overdue' && <span className={clsx(chip, TONE_CLASS.slate)}>Not started</span>}
           {showDue && <span className={clsx(chip, TONE_CLASS.slate)}>Due {shortDay(t.due_on)}</span>}
           {look === 'overdue' && <span className={clsx(chip, TONE_CLASS.red)}>Overdue · {plural(late, 'day')}</span>}
           {look === 'waiting' && (
             <span className={clsx(chip, TONE_CLASS.amber)}>
-              {manage ? 'Waiting for your approval' : managerName ? `Waiting for ${firstName(managerName)}’s approval` : 'Waiting for approval'}
+              {manage ? `${firstName(t.employee_name)} completed · waiting for your approval` : `Completed · waiting for ${firstName(t.assigned_by_name) || firstName(managerName) || 'your manager'}’s approval`}
             </span>
           )}
-          {look === 'approved' && <span className={clsx(chip, TONE_CLASS.green)}>Approved</span>}
+          {look === 'approved' && <span className={clsx(chip, TONE_CLASS.green)}>{closedWord(t)}</span>}
+          {/* Given by the manager (mt_0007): their due date and criticality stand, and it waits for their approval. */}
+          {t.assigned_by_name && (
+            <span className={clsx(chip, TONE_CLASS.teal)} title={`Assigned by ${t.assigned_by_name}`}>
+              <UserPlus className="h-3 w-3" aria-hidden />{manage ? 'Assigned' : `From ${firstName(t.assigned_by_name)}`}
+            </span>
+          )}
           {t.status !== 'open' && late > 0 && <span className={clsx(chip, TONE_CLASS.orange)}>Done {plural(late, 'day')} late</span>}
           {t.status === 'open' && t.sent_back > 0 && !newWord?.startsWith('Sent back') && (
             <span className={clsx(chip, TONE_CLASS.rose)}><Undo2 className="h-3 w-3" aria-hidden />Sent back</span>
@@ -123,6 +130,15 @@ export default function TaskRow({
             </span>
           )}
         </div>
+        {/* How far along it is, once started (the user, 24 Oct: "in progress we can show 50%"). */}
+        {t.status === 'open' && t.progress > 0 && (
+          <div className="mt-2 flex items-center gap-2" title={`${progressWord(t.progress)} · ${t.progress}%`}>
+            <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-ink-100">
+              <div className={clsx('h-full rounded-full', look === 'overdue' ? 'bg-cyrixRed-500' : 'bg-sky-500')} style={{ width: `${t.progress}%` }} />
+            </div>
+            <span className="shrink-0 text-[11px] font-semibold tabular-nums text-ink-600">{progressWord(t.progress)} · {t.progress}%</span>
+          </div>
+        )}
       </div>
 
       {manage && t.status === 'open' && (

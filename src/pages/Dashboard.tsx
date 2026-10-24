@@ -1,13 +1,13 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
-import { CheckCircle2, Hourglass, ListChecks, Timer, Users, type LucideIcon } from 'lucide-react'
+import { CheckCircle2, Hourglass, ListChecks, Search, Timer, Users, type LucideIcon } from 'lucide-react'
 import IconChip from '@/components/IconChip'
 import { CritPill } from '@/components/Criticality'
 import PersonSelect, { usePersonChoice } from '@/components/PersonSelect'
 import { Alert, ChartLoader } from '@/components/ui'
 import { TONE_TEXT, type Tone } from '@/lib/tones'
-import { monthOf, monthTitle, addMonths, today, useMe, useTasks } from '@/lib/tasks'
+import { monthOf, monthTitle, addDays, shortDay, today, useMe, useTasks } from '@/lib/tasks'
 import {
   PERIOD_WORD, byCriticality, byPerson, figures, inPeriod, onTimeShare, periodRange, tatWords, type Figures, type Period,
 } from '@/lib/stats'
@@ -29,21 +29,24 @@ export default function Dashboard() {
   const { data: me } = useMe()
   const manages = (me?.team ?? 0) > 0
   const [period, setPeriod] = useState<Period>('this')
+  const [chosen, setChosen] = useState(() => ({ from: `${monthOf(now)}-01`, to: now }))
+  // The people's list, searched (built for a hundred).
+  const [find, setFind] = useState('')
   const [scope, setScope] = useState<'mine' | 'team' | null>(null)
   const team = (scope ?? (manages ? 'team' : 'mine')) === 'team' && manages
   const { people, person, setPerson } = usePersonChoice()
 
-  const { from, to } = periodRange(period, now)
+  const { from, to } = periodRange(period, now, chosen)
   const mine = useTasks({ from, to }, {}, !team)
   const theirs = useTasks({ from, to }, person ? { employeeId: person.id } : { team: true }, team)
   const q = team ? theirs : mine
   const tasks = useMemo(() => (q.data ?? []).filter(t => inPeriod(t, { from, to })), [q.data, from, to])
   const all = figures(tasks, now)
   const crit = byCriticality(tasks, now)
-  const persons = team && !person ? byPerson(tasks, now) : []
+  const persons = team && !person ? byPerson(tasks, now).filter(p => !find.trim() || `${p.name} ${p.ecode}`.toLowerCase().includes(find.trim().toLowerCase())) : []
   const share = onTimeShare(all)
 
-  const when = period === 'all' ? 'at any time' : `in ${monthTitle(period === 'this' ? monthOf(now) : addMonths(monthOf(now), -1))}`
+  const when = period === 'all' ? 'at any time' : period === 'range' ? `from ${shortDay(from)} to ${shortDay(to)}` : `in ${monthTitle(monthOf(now))}`
   const whose = !team ? 'Your tasks' : person ? `${person.full_name}’s tasks` : 'Your team’s tasks'
 
   return (
@@ -57,9 +60,19 @@ export default function Dashboard() {
           label="Period"
           value={period}
           onChange={v => setPeriod(v as Period)}
-          options={(['this', 'last', 'all'] as Period[]).map(p => [p, PERIOD_WORD[p]])}
+          options={(['this', 'all', 'range'] as Period[]).map(p => [p, PERIOD_WORD[p]])}
         />
       </div>
+      {period === 'range' && (
+        <div className="card grid grid-cols-2 gap-3 p-3 sm:max-w-md sm:p-4" role="group" aria-label="Days from one to another">
+          <label className="block min-w-0"><span className="label">From</span>
+            <input type="date" className="input" value={chosen.from} max={addDays(now, 366)}
+              onChange={e => { const d = e.target.value; if (d) setChosen(c => ({ from: d, to: c.to < d ? d : c.to })) }} /></label>
+          <label className="block min-w-0"><span className="label">To</span>
+            <input type="date" className="input" value={chosen.to} max={addDays(now, 366)}
+              onChange={e => { const d = e.target.value; if (d) setChosen(c => ({ from: c.from > d ? d : c.from, to: d })) }} /></label>
+        </div>
+      )}
 
       {manages && (
         <div className="flex flex-wrap items-center gap-3">
@@ -82,9 +95,9 @@ export default function Dashboard() {
             <Tile icon={ListChecks} tone="sky" label="Total tasks" value={all.total} sub={`due ${when}`} />
             <Tile
               icon={Hourglass} tone="amber" label="Pending" value={all.pending}
-              sub={all.overdue > 0 ? `${all.overdue} overdue` : 'none overdue'} subTone={all.overdue > 0 ? 'red' : undefined}
+              sub={`${all.inProgress} in progress · ${all.overdue} overdue`} subTone={all.overdue > 0 ? 'red' : undefined}
             />
-            <Tile icon={CheckCircle2} tone="green" label="Completed" value={all.completed} sub={`${all.approved} approved · ${all.waiting} waiting`} />
+            <Tile icon={CheckCircle2} tone="green" label="Completed" value={all.completed} sub={all.waiting > 0 ? `${all.waiting} waiting for approval` : `${all.total ? Math.round((all.completed / all.total) * 100) : 0}% of all`} />
             <Tile
               icon={Timer} tone="violet" label="Completion TAT" value={tatWords(all.avgHours)}
               sub={share.pct === null ? 'nothing completed yet' : `${all.onTime} of ${all.completed} on time · ${share.pct}%`}
@@ -131,18 +144,23 @@ export default function Dashboard() {
 
           {team && !person && (
             <section className="card overflow-hidden">
-              <div className="flex items-center gap-2.5 border-b border-ink-100 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2.5 border-b border-ink-100 px-4 py-3">
                 <IconChip icon={Users} tone="teal" />
                 <h2 className="text-base font-semibold text-ink-900">By person</h2>
+                <label className="relative ml-auto w-full sm:w-64">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" aria-hidden />
+                  <input className="input !py-1.5 !pl-8" value={find} onChange={e => setFind(e.target.value)} placeholder="Name or E-code" aria-label="Find a person" />
+                </label>
               </div>
               {persons.length === 0 ? (
-                <p className="px-4 py-6 text-sm text-ink-500">Nobody in your team has a task due {when}.</p>
+                <p className="px-4 py-6 text-sm text-ink-500">{find.trim() ? `Nobody matches “${find.trim()}”.` : `Nobody in your team has a task due ${when}.`}</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[680px] text-sm">
                     <thead>
                       <tr className="text-left text-[11px] uppercase tracking-label text-ink-500">
                         <th className="sticky left-0 bg-surface px-4 py-2.5 font-semibold">Person</th>
+                        <th className="w-[22%] px-3 py-2.5 font-semibold">Where they stand</th>
                         <th className="px-3 py-2.5 text-right font-semibold">Total</th>
                         <th className="px-3 py-2.5 text-right font-semibold">Pending</th>
                         <th className="px-3 py-2.5 text-right font-semibold">Overdue</th>
@@ -160,6 +178,7 @@ export default function Dashboard() {
                               <span className="block text-xs text-ink-500">{p.ecode}</span>
                             </Link>
                           </td>
+                          <td className="px-3 py-3"><MiniBar f={p.f} /></td>
                           <td className="px-3 py-3 text-right font-semibold text-ink-900">{p.f.total}</td>
                           <td className="px-3 py-3 text-right text-ink-800">{p.f.pending}</td>
                           <td className={clsx('px-3 py-3 text-right', p.f.overdue > 0 ? 'font-semibold text-cyrixRed-600' : 'text-ink-400')}>{p.f.overdue}</td>
@@ -231,13 +250,7 @@ function Tile({ icon, tone, label, value, sub, subTone }: {
 /** Where every task stands, as one bar: approved, waiting, to do, overdue. */
 function StandBar({ f }: { f: Figures }) {
   if (f.total === 0) return null
-  const todo = f.pending - f.overdue
-  const parts: Array<[number, string, string]> = [
-    [f.approved, 'bg-green-600', 'approved'],
-    [f.waiting, 'bg-amber-500', 'waiting for approval'],
-    [todo, 'bg-sky-500', 'to do'],
-    [f.overdue, 'bg-cyrixRed-600', 'overdue'],
-  ]
+  const parts = standParts(f)
   const pct = Math.round((f.completed / f.total) * 100)
   return (
     <div className="card p-4">
@@ -256,6 +269,29 @@ function StandBar({ f }: { f: Figures }) {
           </li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+/** Where a set of tasks stands, in the order the bars draw it. */
+function standParts(f: Figures): Array<[number, string, string]> {
+  return [
+    [f.approved, 'bg-green-600', 'completed'],
+    [f.waiting, 'bg-amber-500', 'waiting for approval'],
+    [f.inProgress, 'bg-sky-500', 'in progress'],
+    [f.notStarted, 'bg-ink-300', 'not started'],
+    [f.overdue, 'bg-cyrixRed-600', 'overdue'],
+  ]
+}
+
+/** One person's tasks as a thin bar, the same colours as the big one; the numbers on hover. */
+function MiniBar({ f }: { f: Figures }) {
+  if (f.total === 0) return <span className="text-ink-400">—</span>
+  const parts = standParts(f)
+  return (
+    <div className="flex h-2 min-w-[96px] overflow-hidden rounded-full bg-ink-100" role="img" title={parts.filter(([n]) => n > 0).map(([n, , w]) => `${n} ${w}`).join(' · ')}
+      aria-label={parts.filter(([n]) => n > 0).map(([n, , w]) => `${n} ${w}`).join(', ')}>
+      {parts.map(([n, cls, w]) => n > 0 && <span key={w} className={cls} style={{ width: `${(n / f.total) * 100}%` }} />)}
     </div>
   )
 }
