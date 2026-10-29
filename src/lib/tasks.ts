@@ -63,6 +63,10 @@ export const releaseAt = (due: string) => Date.parse(`${due}T09:00:00+05:30`)
 export const isScheduled = (t: Pick<Task, 'assigned_by_name' | 'status' | 'due_on' | 'release_on'>, at = Date.now()) =>
   !!t.assigned_by_name && t.status === 'open' && at < releaseAt(t.release_on ?? t.due_on)
 /** "27 Oct, 9 AM" */
+/** Hours from when the task reached the person — 9 AM on its scheduled date, if later than when it was added (the user, 29 Oct) — to marking it complete. */
+export const tatHours = (t: Pick<Task, 'created_at' | 'done_at' | 'release_on' | 'assigned_by_name'>): number | null =>
+  t.done_at ? Math.max(0, Date.parse(t.done_at) - Math.max(Date.parse(t.created_at), t.assigned_by_name && t.release_on ? releaseAt(t.release_on) : 0)) / 3_600_000 : null
+
 export const releaseWords = (due: string) => `${shortDay(due)}, 9 AM`
 
 /** Approved for an assigned task; completed for one the person added, which needs no approval (mt_0007). */

@@ -1,5 +1,5 @@
 import { localDay } from '@/lib/when'
-import { CRIT_ORDER, lookOf, monthOf, type Criticality, type Task } from '@/lib/tasks'
+import { CRIT_ORDER, lookOf, monthOf, tatHours, type Criticality, type Task } from '@/lib/tasks'
 
 /**
  * The dashboard's figures, worked out from the tasks themselves.
@@ -65,7 +65,7 @@ export function figures(tasks: Task[], now: string): Figures {
     f.completed++
     if (t.status === 'done') f.waiting++; else f.approved++
     if (t.done_at) {
-      hours += Math.max(0, Date.parse(t.done_at) - Date.parse(t.created_at)) / 3_600_000
+      hours += tatHours(t) ?? 0
       if (localDay(t.done_at) <= t.due_on) f.onTime++
     }
   }
