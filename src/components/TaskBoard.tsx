@@ -26,7 +26,7 @@ type Period = 'this' | 'all' | 'range'
 const PERIODS: Array<[Period, string]> = [['this', 'This month'], ['all', 'All time'], ['range', 'From – To']]
 /** Given by the manager, or added by the person (the user, 24 Oct: "self assigned will be also there … how to filter it?"). */
 type Source = 'any' | 'assigned' | 'self'
-const SOURCES: Array<[Source, string]> = [['any', 'All'], ['assigned', 'Assigned'], ['self', 'Self-added']]
+const SOURCES: Array<[Source, string]> = [['assigned', 'Assigned'], ['self', 'Self-added'], ['any', 'All']]
 type Stage = 'overdue' | 'notstarted' | 'started' | 'inprogress' | 'almost' | 'scheduled'
 const STAGES: Array<[Stage, string, string]> = [
   ['overdue', 'Overdue', LOOK_DOT.overdue],
@@ -82,7 +82,11 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
   const [stage, setStage] = useState<Stage | null>(null)
   // All time first, so nothing overdue from an earlier month is out of sight.
   const [period, setPeriod] = useState<Period>(() => (['this', 'all', 'range'].includes(askedPeriod ?? '') ? askedPeriod as Period : 'all'))
-  const [source, setSource] = useState<Source>('any')
+  // A manager opens on the tasks given out (the user, 29 Oct); a dashboard tile opens on what it counted.
+  const [source, setSource] = useState<Source>(() => {
+    const s = params.get('source')
+    return s === 'assigned' || s === 'self' || s === 'any' ? s : manage ? 'assigned' : 'any'
+  })
   const [range, setRange] = useState<Range>(() => (askedFrom && askedTo ? { from: askedFrom, to: askedTo } : weekOf(now)))
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<{ id: string; opening: Opening } | null>(null)

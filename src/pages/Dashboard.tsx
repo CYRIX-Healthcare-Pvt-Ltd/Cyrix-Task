@@ -33,15 +33,18 @@ export default function Dashboard() {
   // The people's list, searched (built for a hundred).
   const [find, setFind] = useState('')
   const [scope, setScope] = useState<'mine' | 'team' | null>(null)
-  const team = (scope ?? (manages ? 'team' : 'mine')) === 'team' && manages
+  const team = scope === 'team' && manages
   const { people, person, setPerson } = usePersonChoice()
+  // My team opens on the tasks given out, as the board does (the user, 29 Oct).
+  const [source, setSource] = useState<'assigned' | 'self' | 'any'>('assigned')
 
   const { from, to } = periodRange(period, now, chosen)
   const mine = useTasks({ from, to }, {}, !team)
   const theirs = useTasks({ from, to }, person ? { employeeId: person.id } : { team: true }, team)
   const q = team ? theirs : mine
   // A task assigned for later counts once it reaches the person (9 AM on its day).
-  const tasks = useMemo(() => (q.data ?? []).filter(t => inPeriod(t, { from, to }) && !isScheduled(t)), [q.data, from, to])
+  const tasks = useMemo(() => (q.data ?? []).filter(t => inPeriod(t, { from, to }) && !isScheduled(t)
+    && (!team || source === 'any' || (source === 'assigned') === !!t.assigned_by_name)), [q.data, from, to, team, source])
   const all = figures(tasks, now)
   const crit = byCriticality(tasks, now)
   const persons = team && !person ? byPerson(tasks, now).filter(p => !find.trim() || `${p.name} ${p.ecode}`.toLowerCase().includes(find.trim().toLowerCase())) : []
@@ -50,10 +53,10 @@ export default function Dashboard() {
   const when = period === 'all' ? 'at any time' : period === 'range' ? `from ${shortDay(from)} to ${shortDay(to)}` : `in ${monthTitle(monthOf(now))}`
   const whose = !team ? 'Your tasks' : person ? `${person.full_name}’s tasks` : 'Your team’s tasks'
   // A tile opens the board on its own tab, for the same people and period (the user, 29 Oct).
-  const board = (view: string) => {
-    const q = new URLSearchParams({ view, period })
+  const board = (view: string, who = team ? person?.id : undefined) => {
+    const q = new URLSearchParams({ view, period, source: team ? source : 'any' })
     if (period === 'range') { q.set('from', from); q.set('to', to) }
-    if (team && person) q.set('person', person.id)
+    if (who) q.set('person', who)
     return `${team ? '/team' : '/my-task'}?${q}`
   }
 
@@ -88,8 +91,16 @@ export default function Dashboard() {
             label="Team or mine"
             value={team ? 'team' : 'mine'}
             onChange={v => setScope(v as 'mine' | 'team')}
-            options={[['team', 'My team'], ['mine', 'Mine']]}
+            options={[['mine', 'Mine'], ['team', 'My team']]}
           />
+          {team && (
+            <Segmented
+              label="Assigned or self-added"
+              value={source}
+              onChange={v => setSource(v as 'assigned' | 'self' | 'any')}
+              options={[['assigned', 'Assigned'], ['self', 'Self-added'], ['any', 'All']]}
+            />
+          )}
           {team && people && people.length > 0 && <PersonSelect people={people} person={person} onChange={setPerson} />}
         </div>
       )}
@@ -181,7 +192,7 @@ export default function Dashboard() {
                       {persons.map(p => (
                         <tr key={p.id} className="border-t border-ink-100 hover:bg-ink-50">
                           <td className="sticky left-0 bg-surface px-4 py-3">
-                            <Link to={`/team?person=${p.id}`} className="link-accent block min-w-0">
+                            <Link to={board('all', p.id)} className="link-accent block min-w-0">
                               <span className="block truncate font-semibold text-ink-900">{p.name}</span>
                               <span className="block text-xs text-ink-500">{p.ecode}</span>
                             </Link>

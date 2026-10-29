@@ -27,6 +27,9 @@ export default function PersonSelect({ people, person, onChange }: {
   person: Person | null
   onChange: (id: string | null) => void
 }) {
+  // My own reportees in the list; anyone further down is reached by Assign's search (the user, 29 Oct).
+  const ids = new Set(people.map(p => p.id))
+  const mine = people.filter(p => !p.manager_id || !ids.has(p.manager_id) || p.id === person?.id)
   return (
     <label className="flex min-w-0 items-center gap-2">
       <span className="sr-only">Whose tasks</span>
@@ -37,8 +40,8 @@ export default function PersonSelect({ people, person, onChange }: {
         onChange={e => onChange(e.target.value || null)}
         aria-label="Whose tasks"
       >
-        <option value="">Everyone in my team ({people.length})</option>
-        {people.map(p => (
+        <option value="">Everyone in my team</option>
+        {mine.map(p => (
           <option key={p.id} value={p.id}>{p.full_name} · {p.ecode}</option>
         ))}
       </select>
