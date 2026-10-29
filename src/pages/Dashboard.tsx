@@ -28,7 +28,7 @@ export default function Dashboard() {
   const now = today()
   const { data: me } = useMe()
   const manages = (me?.team ?? 0) > 0
-  const [period, setPeriod] = useState<Period>('this')
+  const [period, setPeriod] = useState<Period>('all')
   const [chosen, setChosen] = useState(() => ({ from: `${monthOf(now)}-01`, to: now }))
   // The people's list, searched (built for a hundred).
   const [find, setFind] = useState('')
@@ -71,7 +71,7 @@ export default function Dashboard() {
           label="Period"
           value={period}
           onChange={v => setPeriod(v as Period)}
-          options={(['this', 'all', 'range'] as Period[]).map(p => [p, PERIOD_WORD[p]])}
+          options={(['all', 'this', 'range'] as Period[]).map(p => [p, PERIOD_WORD[p]])}
         />
       </div>
       {period === 'range' && (

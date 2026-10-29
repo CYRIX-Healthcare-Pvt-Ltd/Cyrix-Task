@@ -23,7 +23,7 @@ import {
 type View = 'all' | 'pending' | 'approved' | 'waiting'
 /** The days the board counts, after the search (the user, 24 Oct: "if I select this month so total, pending and rest should be based on that"). */
 type Period = 'this' | 'all' | 'range'
-const PERIODS: Array<[Period, string]> = [['this', 'This month'], ['all', 'All time'], ['range', 'From – To']]
+const PERIODS: Array<[Period, string]> = [['all', 'All time'], ['this', 'This month'], ['range', 'From – To']]
 /** Given by the manager, or added by the person (the user, 24 Oct: "self assigned will be also there … how to filter it?"). */
 type Source = 'any' | 'assigned' | 'self'
 const SOURCES: Array<[Source, string]> = [['assigned', 'Assigned'], ['self', 'Self-added'], ['any', 'All']]
@@ -82,7 +82,7 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
   const [stage, setStage] = useState<Stage | null>(null)
   // All time first, so nothing overdue from an earlier month is out of sight.
   const [period, setPeriod] = useState<Period>(() => (['this', 'all', 'range'].includes(askedPeriod ?? '') ? askedPeriod as Period : 'all'))
-  // A manager opens on the tasks given out (the user, 29 Oct); a dashboard tile opens on what it counted.
+  // A manager opens on the tasks given out, My Task on all (the user, 29 Oct); a dashboard tile opens on what it counted.
   const [source, setSource] = useState<Source>(() => {
     const s = params.get('source')
     return s === 'assigned' || s === 'self' || s === 'any' ? s : manage ? 'assigned' : 'any'
