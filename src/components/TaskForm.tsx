@@ -33,8 +33,10 @@ export function dueProblem(due: string, now: string): string | null {
  * task 14th, why due date is today and tomorrow"), so the date box is the
  * one way to move it. A due date the manager set is shown, not offered.
  */
-export function TaskFields({ value, onChange, now, dueSetBy = null }: {
+export function TaskFields({ value, onChange, now, dueSetBy = null, scheduled }: {
   value: Fields; onChange: (f: Fields) => void; now: string
+  /** An assigned task's scheduled date: the day it reaches the person at 9 AM (mt_0014). */
+  scheduled?: { value: string; onChange: (day: string) => void }
   /** The manager who set the due date: then only they change it (mt_0005). */
   dueSetBy?: string | null
 }) {
@@ -64,7 +66,13 @@ export function TaskFields({ value, onChange, now, dueSetBy = null }: {
           placeholder="Anything that helps — where, for whom, what is needed"
         />
       </label>
-      <DueField value={value.due} onChange={set('due')} now={now} setBy={dueSetBy} />
+      {scheduled
+        ? <div className="grid grid-cols-2 gap-3">
+            <DueField label="Scheduled date" id="sched-words" value={scheduled.value} now={now}
+              onChange={d => { scheduled.onChange(d); if (d && value.due < d) set('due')(d) }} />
+            <DueField value={value.due} onChange={set('due')} now={now} min={scheduled.value || now} />
+          </div>
+        : <DueField value={value.due} onChange={set('due')} now={now} setBy={dueSetBy} />}
     </>
   )
 }
@@ -74,27 +82,27 @@ export function TaskFields({ value, onChange, now, dueSetBy = null }: {
  * 08-10-2026, and which day that is should not need working out. Set by
  * the manager, it is shown greyed with who set it.
  */
-export function DueField({ value, onChange, now, setBy = null, autoFocus = false }: {
-  value: string; onChange: (day: string) => void; now: string; setBy?: string | null; autoFocus?: boolean
+export function DueField({ value, onChange, now, setBy = null, autoFocus = false, label = 'Due date', id = 'due-words', min = now }: {
+  value: string; onChange: (day: string) => void; now: string; setBy?: string | null; autoFocus?: boolean; label?: string; id?: string; min?: string
 }) {
   return (
     <div>
       <label className="block">
-        <span className="label">Due date</span>
+        <span className="label">{label}</span>
         <input
           type="date"
           className="input sm:w-64"
           value={value}
-          min={now}
+          min={min}
           max={addDays(now, 366)}
           onChange={e => onChange(e.target.value)}
-          aria-describedby="due-words"
+          aria-describedby={id}
           disabled={!!setBy}
           required
           data-autofocus={autoFocus || undefined}
         />
       </label>
-      {value && <p id="due-words" className="mt-1.5 text-xs font-medium text-ink-600">{dueWords(value, now)}</p>}
+      {value && <p id={id} className="mt-1.5 text-xs font-medium text-ink-600">{dueWords(value, now)}</p>}
       {setBy && <p className="mt-1 text-xs text-ink-500">Set by {setBy}, so only {setBy} can change it</p>}
     </div>
   )

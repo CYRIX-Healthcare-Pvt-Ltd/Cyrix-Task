@@ -49,6 +49,13 @@ export default function Dashboard() {
 
   const when = period === 'all' ? 'at any time' : period === 'range' ? `from ${shortDay(from)} to ${shortDay(to)}` : `in ${monthTitle(monthOf(now))}`
   const whose = !team ? 'Your tasks' : person ? `${person.full_name}’s tasks` : 'Your team’s tasks'
+  // A tile opens the board on its own tab, for the same people and period (the user, 29 Oct).
+  const board = (view: string) => {
+    const q = new URLSearchParams({ view, period })
+    if (period === 'range') { q.set('from', from); q.set('to', to) }
+    if (team && person) q.set('person', person.id)
+    return `${team ? '/team' : '/my-task'}?${q}`
+  }
 
   return (
     <div className="space-y-6">
@@ -93,12 +100,12 @@ export default function Dashboard() {
       {q.data && (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Tile icon={ListChecks} tone="sky" label="Total tasks" value={all.total} sub={`due ${when}`} />
+            <Tile to={board('all')} icon={ListChecks} tone="sky" label="Total tasks" value={all.total} sub={`due ${when}`} />
             <Tile
-              icon={Hourglass} tone="amber" label="Pending" value={all.pending}
+              to={board('pending')} icon={Hourglass} tone="amber" label="Pending" value={all.pending}
               sub={`${all.inProgress} in progress · ${all.overdue} overdue`} subTone={all.overdue > 0 ? 'red' : undefined}
             />
-            <Tile icon={CheckCircle2} tone="green" label="Completed" value={all.completed} sub={all.waiting > 0 ? `${all.waiting} waiting for approval` : `${all.total ? Math.round((all.completed / all.total) * 100) : 0}% of all`} />
+            <Tile to={board('approved')} icon={CheckCircle2} tone="green" label="Completed" value={all.completed} sub={all.waiting > 0 ? `${all.waiting} waiting for approval` : `${all.total ? Math.round((all.completed / all.total) * 100) : 0}% of all`} />
             <Tile
               icon={Timer} tone="violet" label="Completion TAT" value={tatWords(all.avgHours)}
               sub={share.pct === null ? 'nothing completed yet' : `${all.onTime} of ${all.completed} on time · ${share.pct}%`}
@@ -233,18 +240,27 @@ function Segmented({ label, value, options, onChange }: {
   )
 }
 
-function Tile({ icon, tone, label, value, sub, subTone }: {
-  icon: LucideIcon; tone: Tone; label: string; value: ReactNode; sub: string; subTone?: Tone | 'slate'
+// A tile lights in its own icon's colour under the pointer (the user, 29 Oct).
+const HOVER: Partial<Record<Tone, string>> = {
+  sky: 'hover:border-sky-500 hover:bg-sky-500/5', amber: 'hover:border-amber-500 hover:bg-amber-500/5',
+  green: 'hover:border-green-500 hover:bg-green-500/5', violet: 'hover:border-violet-500 hover:bg-violet-500/5',
+}
+
+function Tile({ icon, tone, label, value, sub, subTone, to }: {
+  icon: LucideIcon; tone: Tone; label: string; value: ReactNode; sub: string; subTone?: Tone | 'slate'; to?: string
 }) {
+  const Box = ({ children }: { children: ReactNode }) => to
+    ? <Link to={to} className={clsx('card btn-press flex flex-col p-4 transition-colors', HOVER[tone])}>{children}</Link>
+    : <div className="card flex flex-col p-4">{children}</div>
   return (
-    <div className="card flex flex-col p-4">
+    <Box>
       <div className="flex items-center gap-2">
         <IconChip icon={icon} tone={tone} />
         <p className="text-xs font-semibold uppercase tracking-label text-ink-500">{label}</p>
       </div>
       <p className="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-ink-900">{value}</p>
       <p className={clsx('mt-1 text-xs font-medium', subTone ? TONE_TEXT[subTone] : 'text-ink-500')}>{sub}</p>
-    </div>
+    </Box>
   )
 }
 

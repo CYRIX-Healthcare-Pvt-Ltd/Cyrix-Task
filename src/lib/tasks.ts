@@ -19,6 +19,8 @@ export interface Task {
   details: string | null
   /** "2026-10-07" */
   due_on: string
+  /** The day it reaches the person at 9 AM (mt_0014). */
+  release_on?: string
   /** The first name of the manager who last changed the due date; null while it is the person's own. Once set, only the manager changes it (mt_0005). */
   due_set_by: string | null
   criticality: Criticality
@@ -58,8 +60,8 @@ export const releaseAt = (due: string) => Date.parse(`${due}T09:00:00+05:30`)
  * Assigned for later and not yet with the person: the manager sees it as Scheduled; it counts in nothing until then
  * (the user, 24 Oct: "show in pending, but for calculation don't use future tasks").
  */
-export const isScheduled = (t: Pick<Task, 'assigned_by_name' | 'status' | 'due_on'>, at = Date.now()) =>
-  !!t.assigned_by_name && t.status === 'open' && at < releaseAt(t.due_on)
+export const isScheduled = (t: Pick<Task, 'assigned_by_name' | 'status' | 'due_on' | 'release_on'>, at = Date.now()) =>
+  !!t.assigned_by_name && t.status === 'open' && at < releaseAt(t.release_on ?? t.due_on)
 /** "27 Oct, 9 AM" */
 export const releaseWords = (due: string) => `${shortDay(due)}, 9 AM`
 
@@ -92,6 +94,9 @@ export interface Person {
   ecode: string
   designation: string | null
   avatar: string | null
+  /** Whom they report to: everyone below me is here, not only my own reportees (mt_0013). */
+  manager_id?: string | null
+  manager_name?: string | null
 }
 
 /* ------------------------------------------------------------------ */
@@ -274,7 +279,7 @@ export type Action =
   | { fn: 'task_delete'; args: { p_task_id: string } }
   | { fn: 'task_seen'; args: { p_task_id: string } }
   | { fn: 'task_progress'; args: { p_task_id: string; p_progress: number } }
-  | { fn: 'task_assign'; args: { p_people: string[]; p_title: string; p_details: string; p_due_on: string; p_criticality: Criticality; p_remarks: string } }
+  | { fn: 'task_assign'; args: { p_people: string[]; p_title: string; p_details: string; p_due_on: string; p_criticality: Criticality; p_remarks: string; p_release_on: string } }
 
 /** Every change goes through one of the database's task functions, and then everything shown is read again. */
 export function useTaskAction() {

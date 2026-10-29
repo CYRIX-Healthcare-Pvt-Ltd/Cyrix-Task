@@ -135,7 +135,7 @@ export default function TaskDialog({
             <Chip tone={lookTone}>{look === 'waiting'
               ? (manage ? `${owner} completed · waiting for your approval` : `Completed · waiting for ${assigner || manager || 'your manager'}’s approval`)
               : lookWord}</Chip>
-            {isScheduled(t) && <Chip tone="violet">Scheduled · {releaseWords(t.due_on)}</Chip>}
+            {isScheduled(t) && <Chip tone="violet">Scheduled · {releaseWords(t.release_on ?? t.due_on)}</Chip>}
             {look === 'overdue' && <Chip tone="red">{plural(late, 'day')} overdue</Chip>}
             {t.status !== 'open' && late > 0 && <Chip tone="orange">Done {plural(late, 'day')} late</Chip>}
             {t.status === 'open' && t.reminders > 0 && <Chip tone="violet"><BellRing className="h-3 w-3" aria-hidden /> Reminded {plural(t.reminders, 'time')}</Chip>}

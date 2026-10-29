@@ -98,7 +98,7 @@ export default function TaskRow({
           )}
           <CritPill value={t.criticality} />
           {isScheduled(t)
-            ? <span className={clsx(chip, TONE_CLASS.violet)} title="The person sees it, and is told, at this time">Scheduled · {releaseWords(t.due_on)}</span>
+            ? <span className={clsx(chip, TONE_CLASS.violet)} title="The person sees it, and is told, at this time">Scheduled · {releaseWords(t.release_on ?? t.due_on)}</span>
             : t.status === 'open' && t.progress === 0 && look !== 'overdue' && <span className={clsx(chip, TONE_CLASS.slate)}>Not started</span>}
           {showDue && <span className={clsx(chip, TONE_CLASS.slate)}>Due {shortDay(t.due_on)}</span>}
           {look === 'overdue' && <span className={clsx(chip, TONE_CLASS.red)}>Overdue · {plural(late, 'day')}</span>}

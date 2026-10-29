@@ -46,7 +46,7 @@ export default function TaskTable({ tasks, manage, now, managerName, onOpen }: {
               const late = daysLate(t, now)
               const tat = t.done_at ? Math.max(0, Date.parse(t.done_at) - Date.parse(t.created_at)) / 3_600_000 : null
               const status = isScheduled(t)
-                ? <span className={clsx(chip, TONE_CLASS.violet)} title="The person sees it, and is told, at this time">Scheduled · {releaseWords(t.due_on)}</span>
+                ? <span className={clsx(chip, TONE_CLASS.violet)} title="The person sees it, and is told, at this time">Scheduled · {releaseWords(t.release_on ?? t.due_on)}</span>
                 : look === 'approved'
                 ? <span className={clsx(chip, TONE_CLASS.green)}>{closedWord(t)}</span>
                 : look === 'waiting'

@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
+import { useSearchParams } from 'react-router-dom'
 import { BellRing, CalendarPlus, CalendarRange, ListChecks, Search, UserPlus, X } from 'lucide-react'
 import TaskRow, { type Opening } from '@/components/TaskRow'
 import TaskDialog from '@/components/TaskDialog'
@@ -74,12 +75,15 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
   const person = whose.team ? whose.person : null
   const now = today()
   const { data: me } = useMe()
-  const [view, setView] = useState<View>('all')
+  // Opened from a dashboard tile (the user, 29 Oct): that tile's tab and the dashboard's period, from the address.
+  const [params] = useSearchParams()
+  const asked = params.get('view'), askedPeriod = params.get('period'), askedFrom = params.get('from'), askedTo = params.get('to')
+  const [view, setView] = useState<View>(() => (['all', 'pending', 'approved', 'waiting'].includes(asked ?? '') ? asked as View : 'all'))
   const [stage, setStage] = useState<Stage | null>(null)
   // All time first, so nothing overdue from an earlier month is out of sight.
-  const [period, setPeriod] = useState<Period>('all')
+  const [period, setPeriod] = useState<Period>(() => (['this', 'all', 'range'].includes(askedPeriod ?? '') ? askedPeriod as Period : 'all'))
   const [source, setSource] = useState<Source>('any')
-  const [range, setRange] = useState<Range>(() => weekOf(now))
+  const [range, setRange] = useState<Range>(() => (askedFrom && askedTo ? { from: askedFrom, to: askedTo } : weekOf(now)))
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<{ id: string; opening: Opening } | null>(null)
   const [adding, setAdding] = useState(false)
