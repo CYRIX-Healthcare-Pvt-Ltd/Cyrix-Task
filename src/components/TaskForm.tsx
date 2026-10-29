@@ -123,7 +123,7 @@ export function AddTask({ due, onClose, onAdded }: { due: string; onClose: () =>
   const [crit, setCrit] = useState<Criticality | null>(null)
   const [error, setError] = useState<string | null>(null)
   const act = useTaskAction()
-  const problem = fieldsProblem(f, now) ?? (crit ? null : 'Choose how critical the task is.')
+  const problem = fieldsProblem(f, now) ?? (f.details.trim() ? null : 'Add a task description.') ?? (crit ? null : 'Choose how critical the task is.')
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()

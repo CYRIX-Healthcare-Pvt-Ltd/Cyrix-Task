@@ -57,7 +57,7 @@ export default function AssignTask({ people, preselect, onClose }: {
   const flip = (id: string) => setChosen(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const flipShown = () => setChosen(s => { const n = new Set(s); for (const { p } of shown) { if (allShown) n.delete(p.id); else n.add(p.id) } return n })
 
-  const problem = chosen.size === 0 ? 'Choose who the task is for.' : (!sched ? 'Choose the scheduled date.' : sched < now ? 'The scheduled date cannot be before today.' : null) ?? fieldsProblem(f, now) ?? (f.due < sched ? 'The due date cannot be before the scheduled date.' : null) ?? (crit ? null : 'Choose how critical the task is.')
+  const problem = chosen.size === 0 ? 'Choose who the task is for.' : (!sched ? 'Choose the scheduled date.' : sched < now ? 'The scheduled date cannot be before today.' : null) ?? fieldsProblem(f, now) ?? (f.details.trim() ? null : 'Add a task description.') ?? (f.due < sched ? 'The due date cannot be before the scheduled date.' : null) ?? (crit ? null : 'Choose how critical the task is.')
   const one = chosen.size === 1 ? people.find(p => chosen.has(p.id)) : null
 
   const submit = async (e: FormEvent) => {
