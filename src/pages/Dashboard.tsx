@@ -5,12 +5,13 @@ import { CheckCircle2, Hourglass, ListChecks, Search, Timer, Users, type LucideI
 import IconChip from '@/components/IconChip'
 import { CritPill } from '@/components/Criticality'
 import { ACCENT } from '@/components/TaskForm'
+import PeriodPick from '@/components/PeriodPick'
 import PersonSelect, { usePersonChoice } from '@/components/PersonSelect'
 import { Alert, ChartLoader } from '@/components/ui'
 import { TONE_TEXT, type Tone } from '@/lib/tones'
-import { monthOf, monthTitle, addDays, isScheduled, shortDay, today, useMe, useTasks } from '@/lib/tasks'
+import { monthOf, monthTitle, isScheduled, shortDay, today, useMe, useTasks } from '@/lib/tasks'
 import {
-  PERIOD_WORD, byCriticality, byPerson, figures, inPeriod, onTimeShare, periodRange, tatWords, type Figures, type Period,
+  byCriticality, byPerson, figures, inPeriod, onTimeShare, periodRange, tatWords, type Figures, type Period,
 } from '@/lib/stats'
 
 /**
@@ -66,23 +67,8 @@ export default function Dashboard() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-ink-900">Dashboard</h1>
         </div>
-        <Segmented
-          label="Period"
-          value={period}
-          onChange={v => setPeriod(v as Period)}
-          options={(['all', 'this', 'range'] as Period[]).map(p => [p, PERIOD_WORD[p]])}
-        />
+        <PeriodPick period={period} onPeriod={setPeriod} range={chosen} onRange={setChosen} />
       </div>
-      {period === 'range' && (
-        <div className="card grid grid-cols-2 gap-3 p-3 sm:max-w-md sm:p-4" role="group" aria-label="Days from one to another">
-          <label className="block min-w-0"><span className="label">From</span>
-            <input type="date" className="input" value={chosen.from} max={addDays(now, 366)}
-              onChange={e => { const d = e.target.value; if (d) setChosen(c => ({ from: d, to: c.to < d ? d : c.to })) }} /></label>
-          <label className="block min-w-0"><span className="label">To</span>
-            <input type="date" className="input" value={chosen.to} max={addDays(now, 366)}
-              onChange={e => { const d = e.target.value; if (d) setChosen(c => ({ from: c.from > d ? d : c.from, to: d })) }} /></label>
-        </div>
-      )}
 
       {manages && (
         <div className="flex flex-wrap items-center gap-3">

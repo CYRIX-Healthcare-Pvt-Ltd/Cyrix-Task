@@ -24,11 +24,10 @@ export default function Team() {
     <TaskBoard
       whose={{ team: true, person }}
       heading={
-        <div className="min-w-0 flex-1 space-y-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-ink-900">My Team Task</h1>
-          </div>
-          <PersonSelect people={people} person={person} onChange={setPerson} />
+        // The heading, whose tasks and Assign task on one row (the user, 18 Nov: "so 1 row will be up").
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-5 gap-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink-900">My Team Task</h1>
+          <div className="w-full sm:w-72"><PersonSelect people={people} person={person} onChange={setPerson} /></div>
         </div>
       }
     />
