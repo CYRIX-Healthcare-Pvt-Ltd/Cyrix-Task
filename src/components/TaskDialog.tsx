@@ -157,7 +157,7 @@ export default function TaskDialog({
           {manage && <p className="text-sm text-ink-600">{assigned ? 'Assigned to' : 'Entered by'} <span className="font-semibold text-ink-900">{t.employee_name}</span> · {t.employee_ecode}</p>}
 
           {/* Notify my manager (mt_0016): the person turns it on; they or their manager can turn it off again (mt_0017). */}
-          {!assigned && (manage || manager) && (manage ? !!t.notify_manager : true) && (
+          {!assigned && t.status === 'open' && (manage || manager) && (manage ? !!t.notify_manager : true) && (
             <button type="button" role="switch" aria-checked={!!t.notify_manager} disabled={act.isPending}
               onClick={() => run({ fn: 'task_set_notify', args: { p_task_id: t.id, p_on: !t.notify_manager } },
                 t.notify_manager ? (manage ? `You will not be told about ${owner}’s task` : `${manager} will not be told`) : `${manager} will be told`)}

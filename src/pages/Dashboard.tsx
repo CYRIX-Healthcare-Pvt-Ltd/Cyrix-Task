@@ -52,7 +52,6 @@ export default function Dashboard() {
   const share = onTimeShare(all)
 
   const when = period === 'all' ? 'at any time' : period === 'range' ? `from ${shortDay(from)} to ${shortDay(to)}` : `in ${monthTitle(monthOf(now))}`
-  const whose = !team ? 'Your tasks' : person ? `${person.full_name}’s tasks` : 'Your team’s tasks'
   // A tile opens the board on its own tab, for the same people and period (the user, 29 Oct).
   const board = (view: string, who = team ? person?.id : undefined) => {
     const q = new URLSearchParams({ view, period, source: team ? source : 'any' })
@@ -66,7 +65,6 @@ export default function Dashboard() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-ink-900">Dashboard</h1>
-          <p className="mt-0.5 text-sm text-ink-500 max-sm:hidden">{whose} due {when}, as they stand now.</p>
         </div>
         <Segmented
           label="Period"
