@@ -4,6 +4,7 @@ import {
   ArrowLeft, BadgeCheck, BellRing, CalendarClock, CheckCircle2, Circle, Clock3, MessageSquare, Gauge, Pencil, Plus, RotateCcw, Send, Trash2, Undo2, UserPlus, TrendingUp,
   type LucideIcon,
 } from 'lucide-react'
+import DropPick from '@/components/DropPick'
 import Dialog from '@/components/Dialog'
 import { CritPicker, CritPill, critOf } from '@/components/Criticality'
 import IconChip from '@/components/IconChip'
@@ -15,8 +16,9 @@ import { useAuth } from '@/contexts/AuthContext'
 import { TONE_CLASS, type Tone } from '@/lib/tones'
 import { dateTime } from '@/lib/when'
 import {
-  PROGRESS, closedWord, isScheduled, releaseWords, dayInSentence, dayTitle, daysLate, firstName, lookOf, today, useHistory, useTaskAction,
+  PROGRESS, closedWord, progressColor, isScheduled, releaseWords, dayInSentence, dayTitle, daysLate, firstName, lookOf, today, useHistory, useTaskAction,
   type Action, type Criticality, type EventKind, type Look, type Me, type Task, type TaskEvent,
+  timeWords,
 } from '@/lib/tasks'
 
 type Step = 'view' | 'complete' | 'edit' | 'remind' | 'due' | 'approve' | 'sendback' | 'reopen' | 'delete'
@@ -119,13 +121,19 @@ export default function TaskDialog({
       title={<span className="break-words">{title}</span>}
       label={step === 'view' ? `Task: ${t.title}` : `${title}: ${t.title}`}
       icon={<IconChip icon={step === 'view' ? LookIcon : STEP_ICON[step]} tone={step === 'view' ? lookTone : STEP_TONE[step]} />}
-      onClose={onClose}
+      onClose={step === 'view' ? onClose : () => go('view')}
       wide={step === 'view'}
+      tools={step === 'view' && !manage && t.status === 'open' && !assigned && (
+        <button type="button" onClick={() => go('edit')} aria-label="Change the task" title="Change"
+          className="btn-press grid h-8 w-8 place-items-center rounded-full text-ink-500 hover:bg-ink-100 hover:text-ink-900">
+          <Pencil className="h-[18px] w-[18px]" />
+        </button>
+      )}
     >
       {step !== 'view' && (
         <div className="rounded-lg bg-ink-50 px-3 py-2 text-sm">
           <p className="break-words font-medium text-ink-900">{t.title}</p>
-          <p className="text-xs text-ink-500">{manage ? `${t.employee_name} · ` : ''}Due {dayInSentence(t.due_on, now)}</p>
+          <p className="text-xs text-ink-500">{manage ? `${t.employee_name} · ` : ''}Due {dayInSentence(t.due_on, now)}{t.due_at ? `, by ${timeWords(t.due_at)}` : ''}</p>
         </div>
       )}
 
@@ -142,6 +150,20 @@ export default function TaskDialog({
           </div>
 
           {manage && <p className="text-sm text-ink-600">{assigned ? 'Assigned to' : 'Entered by'} <span className="font-semibold text-ink-900">{t.employee_name}</span> · {t.employee_ecode}</p>}
+
+          {/* Notify my manager (mt_0016): the person turns it on; they or their manager can turn it off again (mt_0017). */}
+          {!assigned && (manage || manager) && (manage ? !!t.notify_manager : true) && (
+            <button type="button" role="switch" aria-checked={!!t.notify_manager} disabled={act.isPending}
+              onClick={() => run({ fn: 'task_set_notify', args: { p_task_id: t.id, p_on: !t.notify_manager } },
+                t.notify_manager ? (manage ? `You will not be told about ${owner}’s task` : `${manager} will not be told`) : `${manager} will be told`)}
+              className="btn-press flex w-full items-center gap-3 rounded-xl border border-ink-200 p-3 text-left hover:bg-ink-50 disabled:opacity-60">
+              <BellRing className={t.notify_manager ? 'h-5 w-5 shrink-0 text-teal-600' : 'h-5 w-5 shrink-0 text-ink-400'} aria-hidden />
+              <span className="min-w-0 flex-1 text-sm font-semibold text-ink-900">{manage ? `Notify me about ${owner}’s task` : `Notify ${manager}`}</span>
+              <span aria-hidden className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${t.notify_manager ? 'bg-teal-600' : 'bg-ink-300'}`}>
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left] duration-200 ${t.notify_manager ? 'left-[22px]' : 'left-0.5'}`} />
+              </span>
+            </button>
+          )}
           {/* Given by the manager: who, and their remarks (mt_0007). */}
           {assigned && (
             <div className="rounded-xl border border-teal-200 bg-teal-50 px-3.5 py-2.5">
@@ -173,22 +195,10 @@ export default function TaskDialog({
             ? <ProgressShown value={t.progress} />
             : <StatusPicker task={t} onCompleted={() => go('complete')} />)}
 
+
           {error && <Alert kind="error">{error}</Alert>}
 
           <div className="flex flex-wrap gap-2">
-            {!manage && t.status === 'open' && (
-              <>
-                <button type="button" className="btn-primary" onClick={() => go('complete')}>
-                  <CheckCircle2 className="h-4 w-4" /> Mark complete
-                </button>
-                {/* An assigned task is as the manager set it (mt_0007). */}
-                {!assigned && (
-                  <button type="button" className="btn-secondary" onClick={() => go('edit')}>
-                    <Pencil className="h-4 w-4" /> Change
-                  </button>
-                )}
-              </>
-            )}
             {!manage && t.status === 'done' && (
               <p className="text-sm text-ink-600">
                 {assigner ? `${assigner} approves it, or sends it back to you with a reason.` : manager ? `${manager} approves it, or sends it back to you with a reason.` : 'It waits for your reporting manager’s approval.'}
@@ -236,7 +246,7 @@ export default function TaskDialog({
           placeholder="For example: checked the 14 PM dates with the hospital and sent the list"
           required minLength={3}
           help={!assigned
-            ? 'It is then complete.'
+            ? undefined
             : !me?.manager_name
               ? 'Nobody is set as your reporting manager, so nobody can approve it. Tell HR.'
               : me.manager_has_module
@@ -244,13 +254,13 @@ export default function TaskDialog({
                 : `${manager} does not have My Task yet, so it waits for approval until the software administrator gives it to ${manager}.`}
           button={<><CheckCircle2 className="h-4 w-4" /> Mark complete</>}
           busy={act.isPending} error={error} onBack={() => go('view')}
-          onSubmit={async note => { if (await run({ fn: 'task_done', args: { p_task_id: t.id, p_note: note } }, 'Marked complete')) onClose() }}
+          onSubmit={async note => { if (await run({ fn: 'task_done', args: { p_task_id: t.id, p_note: note } }, 'Marked complete')) go('view') }}
         />
       )}
 
       {step === 'edit' && (
         <EditForm task={t} now={now} busy={act.isPending} error={error} onBack={() => go('view')}
-          onSubmit={async f => { if (await run({ fn: 'task_edit', args: { p_task_id: t.id, p_title: f.title, p_details: f.details, p_due_on: f.due } }, 'Task changed')) go('view') }}
+          onSubmit={async (f, time) => { if (await run({ fn: 'task_edit', args: { p_task_id: t.id, p_title: f.title, p_details: f.details, p_due_on: f.due, p_due_at: time || null, p_set_time: true } }, 'Task changed')) go('view') }}
         />
       )}
 
@@ -421,7 +431,7 @@ function ProgressShown({ value }: { value: number }) {
         <span className="label !mb-0">Progress</span>
         <span className="text-sm font-semibold tabular-nums text-ink-900">{word} · {value}%</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-ink-100"><div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: `${value}%` }} /></div>
+      <div className="h-2 overflow-hidden rounded-full bg-ink-100"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${value}%`, background: progressColor(value) }} /></div>
     </div>
   )
 }
@@ -441,17 +451,21 @@ function StatusPicker({ task: t, onCompleted }: { task: Task; onCompleted: () =>
       toast(`${PROGRESS.find(([v]) => v === p)?.[1]} · ${p}%`)
     } catch (e) { setError((e as Error).message) }
   }
+  // Status and Mark complete on one row, Mark complete in Excel's green (the user, 18 Nov).
   return (
     <div className="space-y-2">
-      <label className="block">
-        <span className="label">Status</span>
-        <select className="input sm:w-72" value={String(t.progress)} disabled={act.isPending}
-          onChange={e => { if (e.target.value === 'done') onCompleted(); else void pick(Number(e.target.value)) }}>
-          {PROGRESS.map(([v, word]) => <option key={v} value={v}>{word} · {v}%</option>)}
-          <option value="done">Completed · 100%</option>
-        </select>
-      </label>
-      <div className="h-2 overflow-hidden rounded-full bg-ink-100 sm:w-72"><div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: `${t.progress}%` }} /></div>
+      <span className="label" id="status-label">Status</span>
+      <div className="flex items-stretch gap-2">
+        <DropPick label="Status" className="flex-1" value={String(t.progress)}
+          onChange={v => { if (act.isPending) return; if (v === 'done') onCompleted(); else void pick(Number(v)) }}
+          options={[...PROGRESS.map(([v, word]) => ({ key: String(v), word: `${word} · ${v}%`, mark: <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: progressColor(v) }} aria-hidden /> })),
+            { key: 'done', word: 'Completed · 100%', mark: <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: progressColor(100) }} aria-hidden /> }]} />
+        <button type="button" onClick={onCompleted}
+          className="btn-press inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-[#217346] px-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1a5c38]">
+          <CheckCircle2 className="h-4 w-4" /> <span className="max-[380px]:hidden">Mark </span>complete
+        </button>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-ink-100"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${t.progress}%`, background: progressColor(t.progress, lookOf(t) === 'overdue'), boxShadow: `0 0 4px color-mix(in srgb, ${progressColor(t.progress, lookOf(t) === 'overdue')} 40%, transparent)` }} /></div>
       {error && <Alert kind="error">{error}</Alert>}
     </div>
   )
@@ -503,14 +517,15 @@ function NoteForm({
 }
 
 function EditForm({ task: t, now, busy, error, onBack, onSubmit }: {
-  task: Task; now: string; busy: boolean; error: string | null; onBack: () => void; onSubmit: (f: Fields) => void
+  task: Task; now: string; busy: boolean; error: string | null; onBack: () => void; onSubmit: (f: Fields, time: string) => void
 }) {
   const [f, setF] = useState<Fields>({ title: t.title, details: t.details ?? '', due: t.due_on })
+  const [time, setTime] = useState(t.due_at?.slice(0, 5) ?? '')
   const problem = fieldsProblem(f, now, f.due === t.due_on)
   // noValidate: the box's own check would refuse an overdue task's date left as it is; fieldsProblem says what is wrong instead.
   return (
-    <form noValidate onSubmit={e => { e.preventDefault(); if (!problem) onSubmit(f) }} className="space-y-4">
-      <TaskFields value={f} onChange={setF} now={now} dueSetBy={t.due_set_by} />
+    <form noValidate onSubmit={e => { e.preventDefault(); if (!problem) onSubmit(f, time) }} className="space-y-4">
+      <TaskFields value={f} onChange={setF} now={now} dueSetBy={t.due_set_by} time={t.due_set_by ? undefined : { value: time, onChange: setTime }} />
       <p className="text-xs text-ink-500">What you change is kept in the task’s history.</p>
       {(error || (problem && f.title.trim())) && <Alert kind="error">{error ?? problem}</Alert>}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -653,9 +668,47 @@ function History({ task: t, manage, canComment, myId, owner, manager }: {
   )
 }
 
+/** A change kept as {"changes":[{what, from, to}]} (mt_0018); older notes are plain words. */
+function changesOf(note: string | null): Array<{ what: string; from: string; to: string }> | null {
+  if (!note?.startsWith('{')) return null
+  try { return (JSON.parse(note) as { changes?: Array<{ what: string; from: string; to: string }> }).changes ?? null } catch { return null }
+}
+
 function EventLine({ e, mine }: { e: TaskEvent; mine: boolean }) {
   const [Icon, tone, verb] = EVENT[e.kind] ?? OTHER_EVENT
   const who = mine ? 'You' : firstName(e.by_name) || 'Someone'
+  // What was changed to what, one row each (the user, 18 Nov: "just show it what was changed to what").
+  const changes = e.kind === 'edited' ? changesOf(e.note) : null
+  if (changes) {
+    return (
+      <li className="flex gap-3">
+        <IconChip icon={Icon} tone={tone} className="mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm leading-snug">
+            <span className="font-semibold text-ink-900">{who}</span>{' '}
+            <span className="text-ink-600">{verb}</span>
+            <span className="whitespace-nowrap text-xs text-ink-400"> · {dateTime(e.at)}</span>
+          </p>
+          <ul className="mt-1.5 space-y-1.5">
+            {changes.map((c, i) => c.what === 'Description' ? (
+              <li key={i} className="rounded-lg border border-ink-100 p-2 text-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-label text-ink-500">{c.what}</p>
+                {c.from && <p className="mt-1 whitespace-pre-wrap break-words text-ink-500 line-through decoration-ink-300">{c.from}</p>}
+                <p className="mt-1 whitespace-pre-wrap break-words font-medium text-ink-900">{c.to || <span className="text-ink-400">Removed</span>}</p>
+              </li>
+            ) : (
+              <li key={i} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-lg border border-ink-100 px-2 py-1.5 text-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-label text-ink-500">{c.what}</span>
+                <span className="break-words text-ink-500 line-through decoration-ink-300">{c.from}</span>
+                <span className="text-ink-400" aria-label="changed to">→</span>
+                <span className="break-words font-semibold text-ink-900">{c.to}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </li>
+    )
+  }
   // "Henry changed it to Non-critical · was Critical"; "Henry changed the due date to 9 Oct 2026 · was 30 Sep 2026".
   if ((e.kind === 'criticality' || e.kind === 'due') && e.note?.includes(' → ')) {
     const [from, to] = e.note.split(' → ')
