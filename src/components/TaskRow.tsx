@@ -151,7 +151,7 @@ export default function TaskRow({
           aria-label={`Send ${firstName(t.employee_name)} a reminder about “${t.title}”`}
           title="Send a reminder"
         >
-          <BellRing className="h-[18px] w-[18px] text-violet-500" />
+          <BellRing className="bell-ring h-[18px] w-[18px] text-violet-500" />
         </button>
       )}
       {manage && t.status === 'done' && (

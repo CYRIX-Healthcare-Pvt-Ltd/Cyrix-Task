@@ -92,7 +92,7 @@ export default function TaskTable({ tasks, manage, now, managerName, onOpen }: {
                     )}
                     {manage && t.status === 'open' && !isScheduled(t) && (
                       <button type="button" onClick={() => onOpen(t, 'remind')} className="btn-press inline-flex items-center gap-1 rounded-lg border border-ink-200 px-2.5 py-1.5 text-xs font-semibold text-ink-700 hover:bg-ink-50">
-                        <BellRing className="h-3.5 w-3.5 text-violet-500" aria-hidden /> Remind
+                        <BellRing className="bell-ring h-3.5 w-3.5 text-violet-500" aria-hidden /> Remind
                       </button>
                     )}
                     {!manage && t.status === 'open' && (

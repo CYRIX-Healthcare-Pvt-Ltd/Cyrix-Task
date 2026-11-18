@@ -95,6 +95,11 @@ export default function TaskDialog({
   }, [t.id, t.unseen, seen])
 
   const go = (s: Step) => { setError(null); setStep(s) }
+  // Opened straight on a step from the list (Remind, Complete, Approve): that step is the whole window. A press outside,
+  // the cross or finishing it goes back to the list, and there is no Back to a task never shown (the user, 18 Nov).
+  const direct = opening !== 'view' && step === opening
+  const back = direct ? undefined : () => go('view')
+  const done = () => (direct ? onClose() : go('view'))
 
   /** Runs one action; true when it went through, the database's reason on screen when not. */
   const run = async (a: Action, said: string) => {
@@ -121,7 +126,7 @@ export default function TaskDialog({
       title={<span className="break-words">{title}</span>}
       label={step === 'view' ? `Task: ${t.title}` : `${title}: ${t.title}`}
       icon={<IconChip icon={step === 'view' ? LookIcon : STEP_ICON[step]} tone={step === 'view' ? lookTone : STEP_TONE[step]} />}
-      onClose={step === 'view' ? onClose : () => go('view')}
+      onClose={step === 'view' || direct ? onClose : () => go('view')}
       wide={step === 'view'}
       tools={step === 'view' && !manage && t.status === 'open' && !assigned && (
         <button type="button" onClick={() => go('edit')} aria-label="Change the task" title="Change"
@@ -206,7 +211,7 @@ export default function TaskDialog({
             )}
             {manage && t.status === 'open' && !isScheduled(t) && (
               <button type="button" className="btn-secondary" onClick={() => go('remind')}>
-                <BellRing className="h-4 w-4 text-violet-500" /> Send reminder
+                <BellRing className="bell-ring h-4 w-4 text-violet-500" /> Send reminder
               </button>
             )}
             {manage && t.status === 'done' && (
@@ -253,20 +258,20 @@ export default function TaskDialog({
                 ? `It then waits for ${assigner || manager}’s approval.`
                 : `${manager} does not have My Task yet, so it waits for approval until the software administrator gives it to ${manager}.`}
           button={<><CheckCircle2 className="h-4 w-4" /> Mark complete</>}
-          busy={act.isPending} error={error} onBack={() => go('view')}
-          onSubmit={async note => { if (await run({ fn: 'task_done', args: { p_task_id: t.id, p_note: note } }, 'Marked complete')) go('view') }}
+          busy={act.isPending} error={error} onBack={back}
+          onSubmit={async note => { if (await run({ fn: 'task_done', args: { p_task_id: t.id, p_note: note } }, 'Marked complete')) done() }}
         />
       )}
 
       {step === 'edit' && (
-        <EditForm task={t} now={now} busy={act.isPending} error={error} onBack={() => go('view')}
-          onSubmit={async (f, time) => { if (await run({ fn: 'task_edit', args: { p_task_id: t.id, p_title: f.title, p_details: f.details, p_due_on: f.due, p_due_at: time || null, p_set_time: true } }, 'Task changed')) go('view') }}
+        <EditForm task={t} now={now} busy={act.isPending} error={error} onBack={back}
+          onSubmit={async (f, time) => { if (await run({ fn: 'task_edit', args: { p_task_id: t.id, p_title: f.title, p_details: f.details, p_due_on: f.due, p_due_at: time || null, p_set_time: true } }, 'Task changed')) done() }}
         />
       )}
 
       {step === 'due' && (
-        <DueForm task={t} now={now} owner={owner} busy={act.isPending} error={error} onBack={() => go('view')}
-          onSubmit={async day => { if (await run({ fn: 'task_set_due', args: { p_task_id: t.id, p_due_on: day } }, `Due ${dayInSentence(day, now)} — ${owner} sees the change`)) go('view') }}
+        <DueForm task={t} now={now} owner={owner} busy={act.isPending} error={error} onBack={back}
+          onSubmit={async day => { if (await run({ fn: 'task_set_due', args: { p_task_id: t.id, p_due_on: day } }, `Due ${dayInSentence(day, now)} — ${owner} sees the change`)) done() }}
         />
       )}
 
@@ -275,8 +280,8 @@ export default function TaskDialog({
           label="Add a line"
           placeholder="For example: needed by 3 PM today"
           help={`${owner} sees it on this task, marked new, the next time ${owner} opens My Task.${t.reminders > 0 && t.last_reminded_at ? ` Reminded ${plural(t.reminders, 'time')} so far, last ${dateTime(t.last_reminded_at)}.` : ''}`}
-          button={<><BellRing className="h-4 w-4" /> Send reminder</>}
-          busy={act.isPending} error={error} onBack={() => go('view')}
+          button={<><BellRing className="bell-ring h-4 w-4" /> Send reminder</>}
+          busy={act.isPending} error={error} onBack={back}
           onSubmit={async note => { if (await run({ fn: 'task_remind', args: { p_task_id: t.id, p_note: note || null } }, `Reminder sent to ${owner}`)) onClose() }}
         />
       )}
@@ -294,7 +299,7 @@ export default function TaskDialog({
             placeholder="For example: well done"
             help="Approving closes the task."
             button={<><BadgeCheck className="h-4 w-4" /> Approve</>}
-            busy={act.isPending} error={error} onBack={() => go('view')}
+            busy={act.isPending} error={error} onBack={back}
             onSubmit={async note => { if (await run({ fn: 'task_approve', args: { p_task_id: t.id, p_note: note || null } }, `Approved — ${owner}’s task is closed`)) onClose() }}
           />
         </>
@@ -307,13 +312,13 @@ export default function TaskDialog({
           required minLength={1}
           help={`${owner} sees the reason, and the task is to do again.`}
           button={<><Undo2 className="h-4 w-4" /> Send back</>}
-          busy={act.isPending} error={error} onBack={() => go('view')}
+          busy={act.isPending} error={error} onBack={back}
           onSubmit={async note => { if (await run({ fn: 'task_send_back', args: { p_task_id: t.id, p_note: note } }, `Sent back to ${owner}`)) onClose() }}
         />
       )}
 
       {step === 'reopen' && (
-        <ReopenForm task={t} now={now} owner={owner} busy={act.isPending} error={error} onBack={() => go('view')}
+        <ReopenForm task={t} now={now} owner={owner} busy={act.isPending} error={error} onBack={back}
           onSubmit={async (note, due) => {
             if (await run({ fn: 'task_reopen', args: { p_task_id: t.id, p_note: note, p_due_on: due === t.due_on ? null : due } }, `Reopened — ${owner} has it to do again`)) onClose()
           }}
@@ -483,7 +488,7 @@ function NoteForm({
   minLength?: number
   busy: boolean
   error: string | null
-  onBack: () => void
+  onBack?: () => void
   onSubmit: (note: string) => void
 }) {
   const [note, setNote] = useState('')
@@ -507,7 +512,7 @@ function NoteForm({
       {help && <p className="text-xs leading-relaxed text-ink-500">{help}</p>}
       {error && <Alert kind="error">{error}</Alert>}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <button type="button" className="btn-secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</button>
+        {onBack && <button type="button" className="btn-secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</button>}
         <button type="submit" className="btn-primary" disabled={busy || short}>
           {busy ? <Spinner className="h-4 w-4" /> : null}{button}
         </button>
@@ -517,7 +522,7 @@ function NoteForm({
 }
 
 function EditForm({ task: t, now, busy, error, onBack, onSubmit }: {
-  task: Task; now: string; busy: boolean; error: string | null; onBack: () => void; onSubmit: (f: Fields, time: string) => void
+  task: Task; now: string; busy: boolean; error: string | null; onBack?: () => void; onSubmit: (f: Fields, time: string) => void
 }) {
   const [f, setF] = useState<Fields>({ title: t.title, details: t.details ?? '', due: t.due_on })
   const [time, setTime] = useState(t.due_at?.slice(0, 5) ?? '')
@@ -529,7 +534,7 @@ function EditForm({ task: t, now, busy, error, onBack, onSubmit }: {
       <p className="text-xs text-ink-500">What you change is kept in the task’s history.</p>
       {(error || (problem && f.title.trim())) && <Alert kind="error">{error ?? problem}</Alert>}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <button type="button" className="btn-secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</button>
+        {onBack && <button type="button" className="btn-secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</button>}
         <button type="submit" className="btn-primary" disabled={busy || !!problem}>
           {busy ? <Spinner className="h-4 w-4" /> : <Pencil className="h-4 w-4" />} Save changes
         </button>
@@ -540,7 +545,7 @@ function EditForm({ task: t, now, busy, error, onBack, onSubmit }: {
 
 /** The manager's new due date: from today to a year away. The person sees it, and it is the manager's from then on. */
 function DueForm({ task: t, now, owner, busy, error, onBack, onSubmit }: {
-  task: Task; now: string; owner: string; busy: boolean; error: string | null; onBack: () => void; onSubmit: (day: string) => void
+  task: Task; now: string; owner: string; busy: boolean; error: string | null; onBack?: () => void; onSubmit: (day: string) => void
 }) {
   const [due, setDue] = useState(t.due_on)
   const problem = due === t.due_on ? null : dueProblem(due, now)
@@ -550,7 +555,7 @@ function DueForm({ task: t, now, owner, busy, error, onBack, onSubmit }: {
       <p className="text-xs leading-relaxed text-ink-500">{owner} sees the new date, marked new. From then on only you can change it.</p>
       {(error || problem) && <Alert kind="error">{error ?? problem}</Alert>}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <button type="button" className="btn-secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</button>
+        {onBack && <button type="button" className="btn-secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</button>}
         <button type="submit" className="btn-primary" disabled={busy || !!problem || due === t.due_on}>
           {busy ? <Spinner className="h-4 w-4" /> : <CalendarClock className="h-4 w-4" />} Save due date
         </button>
@@ -561,7 +566,7 @@ function DueForm({ task: t, now, owner, busy, error, onBack, onSubmit }: {
 
 /** An approved task back to the person: why, and a new due date if they need more time. */
 function ReopenForm({ task: t, now, owner, busy, error, onBack, onSubmit }: {
-  task: Task; now: string; owner: string; busy: boolean; error: string | null; onBack: () => void; onSubmit: (note: string, due: string) => void
+  task: Task; now: string; owner: string; busy: boolean; error: string | null; onBack?: () => void; onSubmit: (note: string, due: string) => void
 }) {
   const [note, setNote] = useState('')
   const [due, setDue] = useState(t.due_on)
@@ -599,7 +604,7 @@ function ReopenForm({ task: t, now, owner, busy, error, onBack, onSubmit }: {
       </p>
       {(error || problem) && <Alert kind="error">{error ?? problem}</Alert>}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <button type="button" className="btn-secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</button>
+        {onBack && <button type="button" className="btn-secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</button>}
         <button type="submit" className="btn-primary" disabled={busy || !ready}>
           {busy ? <Spinner className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />} Reopen
         </button>

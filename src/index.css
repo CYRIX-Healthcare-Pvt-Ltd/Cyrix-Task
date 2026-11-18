@@ -1603,3 +1603,11 @@
 @media (prefers-reduced-motion: no-preference) {
   .stand-seg { transform-origin: left; animation: accent-bar 700ms cubic-bezier(.2, .8, .2, 1) both; }
 }
+/* Remind: the bell rings on hover (the user, 18 Nov: "why no hover to shaking bell?"). */
+@media (prefers-reduced-motion: no-preference) {
+  button:hover .bell-ring, button:focus-visible .bell-ring { animation: bell-ring 700ms ease-in-out; transform-origin: 50% 10%; }
+}
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0); } 15% { transform: rotate(18deg); } 30% { transform: rotate(-16deg); }
+  45% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } 75% { transform: rotate(4deg); }
+}
