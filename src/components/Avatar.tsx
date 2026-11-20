@@ -11,7 +11,8 @@ import clsx from 'clsx'
  */
 export function initialsOf(name: string | null | undefined): string {
   return (name ?? '?')
-    .trim().split(/\s+/).slice(0, 2)
+    // Words that start with a letter: "Amal - Test" is AT, not A- (the user, 20 Nov: "Name?").
+    .trim().split(/\s+/).filter(w => /^\p{L}/u.test(w)).slice(0, 2)
     .map(p => p[0] ?? '')
     .join('')
     .toUpperCase() || '?'

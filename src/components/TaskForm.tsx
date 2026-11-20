@@ -105,12 +105,12 @@ export function DueField({ value, onChange, now, setBy = null, autoFocus = false
   value: string; onChange: (day: string) => void; now: string; setBy?: string | null; autoFocus?: boolean; label?: string; id?: string; min?: string; words?: boolean
 }) {
   return (
-    <div>
-      <label className="block">
+    <div className="min-w-0">
+      <label className="block min-w-0">
         <span className="label">{label}</span>
         <input
           type="date"
-          className={words ? 'input sm:w-64' : 'input w-full min-w-0'}
+          className={words ? 'input sm:w-64' : 'input w-full min-w-0 max-w-full appearance-none'}
           value={value}
           min={min}
           max={addDays(now, 366)}

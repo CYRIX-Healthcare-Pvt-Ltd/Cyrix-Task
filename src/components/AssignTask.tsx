@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import clsx from 'clsx'
 import { Check, ChevronDown, Search, UserPlus, Users } from 'lucide-react'
 import Dialog from '@/components/Dialog'
@@ -30,6 +30,16 @@ export default function AssignTask({ people, preselect, onClose }: {
   const [f, setF] = useState<Fields>({ title: '', details: '', due: now })
   const [sched, setSched] = useState(now)
   const [time, setTime] = useState('')
+  // Assign to closes into one line once people are chosen; a press on it opens the list, a press outside closes it
+  // (the user, 20 Nov: "so this will be always open?").
+  const [listOpen, setListOpen] = useState(!preselect)
+  const listBox = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!listOpen) return
+    const out = (e: PointerEvent) => { if (!listBox.current?.contains(e.target as Node)) setListOpen(false) }
+    document.addEventListener('pointerdown', out)
+    return () => document.removeEventListener('pointerdown', out)
+  }, [listOpen])
   const [crit, setCrit] = useState<Criticality | null>(null)
   const [remarks, setRemarks] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -80,12 +90,21 @@ export default function AssignTask({ people, preselect, onClose }: {
   return (
     <Dialog title="Assign a task" icon={<IconChip icon={UserPlus} tone="teal" />} onClose={onClose} wide>
       <form onSubmit={submit} className="space-y-4">
-        <div>
+        <div ref={listBox}>
           <div className="flex items-baseline justify-between gap-2">
             <span className="label !mb-0">Assign to</span>
             <span className="text-xs font-medium text-ink-500">{chosen.size} of {people.length} chosen</span>
           </div>
-          <div className="mt-1.5 overflow-hidden rounded-xl border border-ink-200">
+          <button type="button" onClick={() => setListOpen(o => !o)} aria-expanded={listOpen}
+            className={clsx('btn-press mt-1.5 flex w-full items-center gap-2 rounded-xl border bg-surface px-3 py-2.5 text-left text-sm transition-colors',
+              listOpen ? 'border-ink-400 ring-2 ring-ink-200' : 'border-ink-200 hover:bg-ink-50')}>
+            <Users className="h-4 w-4 shrink-0 text-teal-600" aria-hidden />
+            <span className={clsx('min-w-0 flex-1 truncate', chosen.size ? 'font-semibold text-ink-900' : 'text-ink-400')}>
+              {chosen.size === 0 ? 'Choose people' : people.filter(p => chosen.has(p.id)).map(p => p.full_name).join(', ')}
+            </span>
+            <ChevronDown className={clsx('h-4 w-4 shrink-0 text-ink-500 transition-transform duration-200', listOpen && 'rotate-180')} aria-hidden />
+          </button>
+          {listOpen && <div className="mt-1.5 overflow-hidden rounded-xl border border-ink-200">
             <div className="flex items-center gap-2 border-b border-ink-100 bg-ink-50 px-3 py-2">
               <Search className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
               <input className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-400" placeholder="Name or E-code" value={q} onChange={e => setQ(e.target.value)} aria-label="Find a person" />
@@ -122,7 +141,7 @@ export default function AssignTask({ people, preselect, onClose }: {
               })}
               {!shown.length && <li className="px-3 py-4 text-center text-sm text-ink-500">Nobody by that name</li>}
             </ul>
-          </div>
+          </div>}
         </div>
 
         <TaskFields value={f} onChange={setF} now={now} scheduled={{ value: sched, onChange: setSched }} time={{ value: time, onChange: setTime }} />
