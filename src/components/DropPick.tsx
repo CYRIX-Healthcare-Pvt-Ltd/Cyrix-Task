@@ -9,7 +9,7 @@ export interface DropOption<K extends string> { key: K; word: string; mark?: Rea
  * beautifully"). The chosen one is on the button with its mark and count; the list drops under it, a tick on the
  * chosen. A press outside or Escape closes it.
  */
-export default function DropPick<K extends string>({ label, value, options, onChange, align = 'left', className, icon }: {
+export default function DropPick<K extends string>({ label, value, options, onChange, align = 'left', className, icon, compact = false }: {
   label: string
   value: K
   options: Array<DropOption<K>>
@@ -18,6 +18,8 @@ export default function DropPick<K extends string>({ label, value, options, onCh
   className?: string
   /** Shown on the button in place of the chosen one's mark. */
   icon?: ReactNode
+  /** Only the icon on the button, for a narrow phone row; the list still says every choice. */
+  compact?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
@@ -38,8 +40,7 @@ export default function DropPick<K extends string>({ label, value, options, onCh
         className={clsx('btn-press flex w-full items-center gap-2 rounded-xl border bg-surface px-3 py-2.5 text-left text-sm font-semibold text-ink-900 transition-colors',
           open ? 'border-ink-400 ring-2 ring-ink-200' : 'border-ink-200 hover:bg-ink-50')}>
         {icon ?? cur.mark}
-        <span className="min-w-0 flex-1 truncate">{cur.word}</span>
-        {cur.count != null && <span className="rounded-full bg-ink-100 px-2 py-0.5 text-xs tabular-nums text-ink-600">{cur.count}</span>}
+        {!compact && <span className="min-w-0 flex-1 truncate">{cur.word}</span>}
         <ChevronDown className={clsx('h-4 w-4 shrink-0 text-ink-500 transition-transform duration-200', open && 'rotate-180')} aria-hidden />
       </button>
       {open && (

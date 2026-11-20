@@ -10,11 +10,12 @@ import TaskTable from '@/components/TaskTable'
 import IconChip from '@/components/IconChip'
 import { AddTask } from '@/components/TaskForm'
 import AssignTask from '@/components/AssignTask'
+import { CRITICALITY, CritBars } from '@/components/Criticality'
 import { Alert, ChartLoader, EmptyState } from '@/components/ui'
 import {
   CRIT_ORDER, LOOK_DOT, LOOK_ORDER, addDays, dayInSentence, firstName, isScheduled, lookOf, monthOf, monthTitle,
   shortDay, today, useMe, usePeople, useTasks,
-  type Person, type Range, type Task,
+  type Criticality, type Person, type Range, type Task,
 } from '@/lib/tasks'
 
 /*
@@ -111,6 +112,8 @@ export default function TaskBoard({ whose, heading, picker }: { whose: Whose; he
     return s === 'assigned' || s === 'self' || s === 'any' ? s : manage ? 'assigned' : 'any'
   })
   const [range, setRange] = useState<Range>(() => (askedFrom && askedTo ? { from: askedFrom, to: askedTo } : weekOf(now)))
+  // How critical (the user, 20 Nov: "user needs criticality filter also"): every count follows it, like the search.
+  const [crit, setCrit] = useState<Criticality | 'any'>('any')
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<{ id: string; opening: Opening } | null>(null)
   const [adding, setAdding] = useState(false)
@@ -131,9 +134,10 @@ export default function TaskBoard({ whose, heading, picker }: { whose: Whose; he
     const needle = q.trim().toLowerCase()
     return tasks.filter(t => t.due_on >= days.from && t.due_on <= days.to
       && (source === 'any' || (source === 'assigned') === !!t.assigned_by_name)
+      && (crit === 'any' || t.criticality === crit)
       && (!needle || [t.title, t.details, t.remarks, t.employee_name, t.employee_ecode, t.assigned_by_name, t.done_note]
         .some(v => (v ?? '').toLowerCase().includes(needle))))
-  }, [tasks, q, days.from, days.to, source])
+  }, [tasks, q, days.from, days.to, source, crit])
 
   const { tally, stages } = useMemo(() => {
     const tally: Record<View, number> = { all: 0, pending: 0, approved: 0, waiting: 0 }
@@ -145,6 +149,16 @@ export default function TaskBoard({ whose, heading, picker }: { whose: Whose; he
     }
     return { tally, stages }
   }, [found, now])
+
+  // Every criticality with how many of the days, source and search have (not narrowed by itself).
+  const critOptions = useMemo(() => {
+    const base = tasks.filter(t => t.due_on >= days.from && t.due_on <= days.to && !isScheduled(t)
+      && (source === 'any' || (source === 'assigned') === !!t.assigned_by_name))
+    return [
+      { key: 'any' as const, word: 'All levels', count: base.length, mark: <CritBars value="critical" className="h-3.5 w-3.5 !text-ink-400" /> },
+      ...CRITICALITY.map(c => ({ key: c.value, word: c.word, count: base.filter(t => t.criticality === c.value).length, mark: <CritBars value={c.value} className="h-3.5 w-3.5" /> })),
+    ]
+  }, [tasks, days.from, days.to, source])
 
   const listed: Task[] = view === 'all'
       ? found.filter(t => !isScheduled(t)).sort(byLookThenDue(now))
@@ -216,8 +230,8 @@ export default function TaskBoard({ whose, heading, picker }: { whose: Whose; he
       <div className="space-y-3">
         {/* One toolbar row on a computer: the search, the days, Assigned or self-added, and the order, all one height
             (the user, 18 Nov: "is there any better idea"); on a phone each the full width, then the drop-downs. */}
-        <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
-        <label className="relative block min-w-0 lg:min-w-[12rem] lg:flex-1">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+        <label className="relative block min-w-0 lg:min-w-[8rem] lg:flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" aria-hidden />
           <input className="input !pl-9 !pr-9" value={q} onChange={e => setQ(e.target.value)} placeholder={manage ? 'Task, person or E-code' : 'Search your tasks'} aria-label="Search tasks" />
           {q && (
@@ -233,19 +247,21 @@ export default function TaskBoard({ whose, heading, picker }: { whose: Whose; he
             </button>
           ))}
         </div>
-        <DropPick label="Sort" value={sortNow} onChange={setSort} align="right" className="max-sm:hidden lg:w-52 lg:shrink-0"
+        <DropPick label="How critical" value={crit} onChange={setCrit} className="max-sm:hidden lg:w-36 lg:shrink-0" options={critOptions} />
+        <DropPick label="Sort" value={sortNow} onChange={setSort} align="right" className="max-sm:hidden lg:w-40 lg:shrink-0"
           icon={<ArrowDownUp className="h-4 w-4 shrink-0 text-ink-500" aria-hidden />}
           options={SORTS_OF[view].map(k => ({ key: k, word: SORT_WORD[k] }))} />
         </div>
 
         {/* On a phone the pills become a drop-down, with the order beside it (the user, 18 Nov); on a computer the order sits at the end of the pills. */}
-        <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] gap-2 sm:hidden">
+        <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-2 sm:hidden">
           <DropPick label="Which tasks" value={view} onChange={v => { setView(v); setStage(null); setSort(SORTS_OF[v][0]) }}
             options={PILLS.map(([v, word, dot]) => ({
               key: v, word, count: tally[v],
               mark: v === 'all' ? <ListChecks className="h-4 w-4 shrink-0 text-ink-500" aria-hidden /> : <span className={clsx('h-2 w-2 shrink-0 rounded-full', dot)} aria-hidden />,
             }))} />
-          <DropPick label="Sort" value={sortNow} onChange={setSort} align="right"
+          <DropPick label="How critical" value={crit} onChange={setCrit} align="right" options={critOptions} />
+          <DropPick label="Sort" value={sortNow} onChange={setSort} align="right" compact
             icon={<ArrowDownUp className="h-4 w-4 shrink-0 text-ink-500" aria-hidden />}
             options={SORTS_OF[view].map(k => ({ key: k, word: SORT_WORD[k] }))} />
         </div>

@@ -300,7 +300,7 @@ export type Action =
   | { fn: 'task_send_back'; args: { p_task_id: string; p_note: string } }
   | { fn: 'task_delete'; args: { p_task_id: string } }
   | { fn: 'task_seen'; args: { p_task_id: string } }
-  | { fn: 'task_progress'; args: { p_task_id: string; p_progress: number } }
+  | { fn: 'task_progress'; args: { p_task_id: string; p_progress: number; p_note: string } }
   | { fn: 'task_set_notify'; args: { p_task_id: string; p_on: boolean } }
   | { fn: 'task_assign'; args: { p_people: string[]; p_title: string; p_details: string; p_due_on: string; p_criticality: Criticality; p_remarks: string; p_release_on: string; p_due_at: string | null } }
 

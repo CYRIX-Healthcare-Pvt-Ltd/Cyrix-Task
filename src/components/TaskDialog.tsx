@@ -52,7 +52,8 @@ const EVENT: Record<EventKind, [LucideIcon, Tone, string]> = {
 /** A step this version does not know yet — one a later version added — still shows, plainly. */
 const OTHER_EVENT: [LucideIcon, Tone, string] = [Pencil, 'slate', 'changed the task']
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+const NL = String.fromCharCode(10)
+const plural =(n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 /**
  * A task: what it is, where it stands, its history and comments, and what
@@ -449,21 +450,32 @@ function ProgressShown({ value }: { value: number }) {
 function StatusPicker({ task: t, onCompleted }: { task: Task; onCompleted: () => void }) {
   const act = useTaskAction()
   const [error, setError] = useState<string | null>(null)
-  const pick = async (p: number) => {
-    if (p === t.progress) return
+  // A new stage first asks what was done (the user, 20 Nov: "remark of what you did mandatory").
+  const [want, setWant] = useState<number | null>(null)
+  const word = (p: number) => `${PROGRESS.find(([v]) => v === p)?.[1]} · ${p}%`
+  const pick = async (p: number, note: string) => {
     setError(null)
     try {
-      await act.mutateAsync({ fn: 'task_progress', args: { p_task_id: t.id, p_progress: p } })
-      toast(`${PROGRESS.find(([v]) => v === p)?.[1]} · ${p}%`)
+      await act.mutateAsync({ fn: 'task_progress', args: { p_task_id: t.id, p_progress: p, p_note: note } })
+      toast(word(p)); setWant(null)
     } catch (e) { setError((e as Error).message) }
   }
+  if (want != null) return (
+    <div className="space-y-3 rounded-xl border border-ink-200 p-3">
+      <p className="text-sm font-semibold text-ink-900">{word(t.progress)} <span className="text-ink-400">→</span> {word(want)}</p>
+      <NoteForm label={want < t.progress ? 'Why is it going back?' : 'What did you do?'}
+        placeholder={want < t.progress ? 'For example: the hospital asked to redo the bill list' : 'For example: collected 6 of 12 bills from the hospital'}
+        required minLength={3} button={<>Save</>} busy={act.isPending} error={error}
+        onBack={() => { setWant(null); setError(null) }} onSubmit={note => void pick(want, note)} />
+    </div>
+  )
   // Status and Mark complete on one row, Mark complete in Excel's green (the user, 18 Nov).
   return (
     <div className="space-y-2">
       <span className="label" id="status-label">Status</span>
       <div className="flex items-stretch gap-2">
         <DropPick label="Status" className="flex-1" value={String(t.progress)}
-          onChange={v => { if (act.isPending) return; if (v === 'done') onCompleted(); else void pick(Number(v)) }}
+          onChange={v => { if (act.isPending) return; if (v === 'done') onCompleted(); else if (Number(v) !== t.progress) { setError(null); setWant(Number(v)) } }}
           options={[...PROGRESS.map(([v, word]) => ({ key: String(v), word: `${word} · ${v}%`, mark: <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: progressColor(v) }} aria-hidden /> })),
             { key: 'done', word: 'Completed · 100%', mark: <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: progressColor(100) }} aria-hidden /> }]} />
         <button type="button" onClick={onCompleted}
@@ -681,7 +693,9 @@ function changesOf(note: string | null): Array<{ what: string; from: string; to:
 }
 
 function EventLine({ e, mine }: { e: TaskEvent; mine: boolean }) {
-  const [Icon, tone, verb] = EVENT[e.kind] ?? OTHER_EVENT
+  const [Icon, tone, verb0] = EVENT[e.kind] ?? OTHER_EVENT
+  const back = e.kind === 'progress' && !!e.note?.startsWith('Back to ')
+  const verb = back ? 'moved it back' : verb0
   const who = mine ? 'You' : firstName(e.by_name) || 'Someone'
   // What was changed to what, one row each (the user, 18 Nov: "just show it what was changed to what").
   const changes = e.kind === 'edited' ? changesOf(e.note) : null
@@ -740,7 +754,12 @@ function EventLine({ e, mine }: { e: TaskEvent; mine: boolean }) {
           <span className="text-ink-600">{verb}</span>
           <span className="whitespace-nowrap text-xs text-ink-400"> · {dateTime(e.at)}</span>
         </p>
-        {e.note && (
+        {e.kind === 'progress' && e.note?.includes(NL) ? (
+          <>
+            <p className="mt-0.5 text-sm font-semibold text-ink-900">{e.note.slice(back ? 8 : 0, e.note.indexOf(NL))}</p>
+            <p className="mt-1 whitespace-pre-wrap break-words rounded-lg bg-ink-50 px-3 py-2 text-sm text-ink-800">{e.note.slice(e.note.indexOf(NL) + 1)}</p>
+          </>
+        ) : e.note && (
           <p className={clsx(
             'mt-1 whitespace-pre-wrap break-words text-sm',
             e.kind === 'comment' || e.kind === 'reminder' || e.kind === 'sent_back' || e.kind === 'approved' || e.kind === 'reopened' || e.kind === 'assigned'
