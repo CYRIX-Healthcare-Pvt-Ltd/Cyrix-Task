@@ -8,7 +8,7 @@ import { CritPicker } from '@/components/Criticality'
 import { Alert, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
 import { TaskFields, fieldsProblem, type Fields } from '@/components/TaskForm'
-import { dayInSentence, firstName, today, useTaskAction, type Criticality, type Person } from '@/lib/tasks'
+import { clockNow, dayInSentence, firstName, timeWords, today, useTaskAction, type Criticality, type Person } from '@/lib/tasks'
 
 /**
  * A task the manager gives to one, several or all of the people who report to them (mt_0007; the user,
@@ -29,6 +29,7 @@ export default function AssignTask({ people, preselect, onClose }: {
   const [q, setQ] = useState('')
   const [f, setF] = useState<Fields>({ title: '', details: '', due: now })
   const [sched, setSched] = useState(now)
+  const [time, setTime] = useState('')
   const [crit, setCrit] = useState<Criticality | null>(null)
   const [remarks, setRemarks] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -57,7 +58,7 @@ export default function AssignTask({ people, preselect, onClose }: {
   const flip = (id: string) => setChosen(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const flipShown = () => setChosen(s => { const n = new Set(s); for (const { p } of shown) { if (allShown) n.delete(p.id); else n.add(p.id) } return n })
 
-  const problem = chosen.size === 0 ? 'Choose who the task is for.' : (!sched ? 'Choose the scheduled date.' : sched < now ? 'The scheduled date cannot be before today.' : null) ?? fieldsProblem(f, now) ?? (f.details.trim() ? null : 'Add a task description.') ?? (f.due < sched ? 'The due date cannot be before the scheduled date.' : null) ?? (crit ? null : 'Choose how critical the task is.')
+  const problem = chosen.size === 0 ? 'Choose who the task is for.' : (!sched ? 'Choose the scheduled date.' : sched < now ? 'The scheduled date cannot be before today.' : null) ?? fieldsProblem(f, now) ?? (f.details.trim() ? null : 'Add a task description.') ?? (f.due < sched ? 'The due date cannot be before the scheduled date.' : null) ?? (crit ? null : 'Choose how critical the task is.') ?? (time && f.due === now && time <= clockNow() ? 'That due time has passed.' : null) ?? (time && f.due === sched && time <= '09:00' ? 'The task reaches them at 9 AM, so the due time must be after 9 AM.' : null)
   const one = chosen.size === 1 ? people.find(p => chosen.has(p.id)) : null
 
   const submit = async (e: FormEvent) => {
@@ -66,10 +67,10 @@ export default function AssignTask({ people, preselect, onClose }: {
     setError(null)
     try {
       const n = await act.mutateAsync({ fn: 'task_assign', args: {
-        p_people: [...chosen], p_title: f.title, p_details: f.details, p_due_on: f.due, p_criticality: crit, p_remarks: remarks, p_release_on: sched,
+        p_people: [...chosen], p_title: f.title, p_details: f.details, p_due_on: f.due, p_criticality: crit, p_remarks: remarks, p_release_on: sched, p_due_at: time || null,
       } }) as number
       const who = n === 1 && one ? firstName(one.full_name) : `${n} people`
-      toast(`Assigned to ${who}${sched > now ? `, from ${dayInSentence(sched, now)} 9 AM` : ''}, due ${dayInSentence(f.due, now)}`)
+      toast(`Assigned to ${who}${sched > now ? `, from ${dayInSentence(sched, now)} 9 AM` : ''}, due ${dayInSentence(f.due, now)}${time ? ` by ${timeWords(time)}` : ''}`)
       onClose()
     } catch (err) {
       setError((err as Error).message)
@@ -124,7 +125,7 @@ export default function AssignTask({ people, preselect, onClose }: {
           </div>
         </div>
 
-        <TaskFields value={f} onChange={setF} now={now} scheduled={{ value: sched, onChange: setSched }} />
+        <TaskFields value={f} onChange={setF} now={now} scheduled={{ value: sched, onChange: setSched }} time={{ value: time, onChange: setTime }} />
         <div>
           <span className="label" id="assign-crit">How critical</span>
           <CritPicker value={crit} onChange={setCrit} labelledBy="assign-crit" />

@@ -73,11 +73,20 @@ export function TaskFields({ value, onChange, now, dueSetBy = null, scheduled, t
         />
       </label>
       {scheduled
-        ? <div className="grid grid-cols-2 gap-3">
-            <DueField label="Scheduled date" id="sched-words" value={scheduled.value} now={now}
-              onChange={d => { scheduled.onChange(d); if (d && value.due < d) set('due')(d) }} />
-            <DueField value={value.due} onChange={set('due')} now={now} min={scheduled.value || now} />
-          </div>
+        ? <>
+            <div className="grid grid-cols-2 gap-3">
+              <DueField label="Scheduled date" id="sched-words" value={scheduled.value} now={now}
+                onChange={d => { scheduled.onChange(d); if (d && value.due < d) set('due')(d) }} />
+              <DueField value={value.due} onChange={set('due')} now={now} min={scheduled.value || now} />
+            </div>
+            {/* A due time on an assigned task too (mt_0022; the user, 20 Nov). */}
+            {time && (
+              <div className="grid grid-cols-2 gap-3">
+                <div />
+                <TimePicker value={time.value} onChange={time.onChange} accent={time.accent} />
+              </div>
+            )}
+          </>
         : time
         ? <div>
             <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-3">

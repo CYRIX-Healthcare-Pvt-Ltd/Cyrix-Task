@@ -302,7 +302,7 @@ export type Action =
   | { fn: 'task_seen'; args: { p_task_id: string } }
   | { fn: 'task_progress'; args: { p_task_id: string; p_progress: number } }
   | { fn: 'task_set_notify'; args: { p_task_id: string; p_on: boolean } }
-  | { fn: 'task_assign'; args: { p_people: string[]; p_title: string; p_details: string; p_due_on: string; p_criticality: Criticality; p_remarks: string; p_release_on: string } }
+  | { fn: 'task_assign'; args: { p_people: string[]; p_title: string; p_details: string; p_due_on: string; p_criticality: Criticality; p_remarks: string; p_release_on: string; p_due_at: string | null } }
 
 /** Every change goes through one of the database's task functions, and then everything shown is read again. */
 export function useTaskAction() {
