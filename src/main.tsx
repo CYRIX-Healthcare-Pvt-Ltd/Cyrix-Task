@@ -2,6 +2,7 @@
 import './lib/safeStorage'
 import { startSessionGuard } from './lib/sessionGuard'
 import { startIdleSignOut } from './lib/idleSignOut'
+import { startMaintenance } from './lib/maintenance'
 import { startErrorReporting } from './lib/reportErrors'
 import { supabase } from './lib/supabase'
 import React from 'react'
@@ -47,6 +48,7 @@ const queryClient = new QueryClient({
 startSessionGuard()
 // Signed out after 3 hours with nothing done, across every Cyrix app.
 startIdleSignOut(supabase)
+startMaintenance(supabase, 'tasks')
 // Errors people hit, to app.cyrix.in/ops (KPI 0230).
 startErrorReporting(supabase, 'tasks', import.meta.env.VITE_VERCEL_GIT_COMMIT_SHA?.slice(0, 7))
 
