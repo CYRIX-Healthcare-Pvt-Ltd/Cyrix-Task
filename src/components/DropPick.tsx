@@ -44,7 +44,7 @@ export default function DropPick<K extends string>({ label, value, options, onCh
       </button>
       {open && (
         <ul role="listbox" aria-label={label}
-          className={clsx('drop-pop absolute z-40 mt-1.5 min-w-full overflow-hidden rounded-xl border border-ink-200 bg-surface p-1 shadow-2xl', align === 'right' ? 'right-0' : 'left-0')}>
+          className={clsx('drop-pop absolute z-40 mt-1.5 max-h-80 min-w-full max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-ink-200 bg-surface p-1 shadow-2xl', align === 'right' ? 'right-0' : 'left-0')}>
           {options.map((o, i) => {
             const on = o.key === value
             return (

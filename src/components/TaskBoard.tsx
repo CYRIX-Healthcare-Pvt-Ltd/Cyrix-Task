@@ -92,7 +92,7 @@ const ALL_TIME: Range = { from: '2000-01-01', to: '2999-12-31' }
  * Assign task for the manager and Add task for the person. A search over name, description and person; the filters
  * by where each stands; From – To for the tasks due from one day to another (the user, 6 Oct).
  */
-export default function TaskBoard({ whose, heading }: { whose: Whose; heading: ReactNode }) {
+export default function TaskBoard({ whose, heading, picker }: { whose: Whose; heading: ReactNode; picker?: ReactNode }) {
   const manage = whose.team
   const person = whose.team ? whose.person : null
   const now = today()
@@ -186,16 +186,20 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         {heading}
-        {!manage && (
-          <button type="button" className="btn-primary" onClick={() => setAdding(true)}>
-            <CalendarPlus className="h-4 w-4" /> Add task
-          </button>
-        )}
-        {manage && (people?.length ?? 0) > 0 && (
-          <button type="button" className="btn-primary" onClick={() => setAssigning(true)}>
-            <UserPlus className="h-4 w-4" /> Assign task
-          </button>
-        )}
+        {/* Whose tasks and Assign task side by side, on a phone too (the user, 20 Nov: "make it same row"). */}
+        <div className={picker ? 'flex w-full items-center gap-2 sm:w-auto' : 'contents'}>
+          {picker && <div className="min-w-0 flex-1 sm:w-72 sm:flex-none">{picker}</div>}
+          {!manage && (
+            <button type="button" className="btn-primary" onClick={() => setAdding(true)}>
+              <CalendarPlus className="h-4 w-4" /> Add task
+            </button>
+          )}
+          {manage && (people?.length ?? 0) > 0 && (
+            <button type="button" className="btn-primary shrink-0" onClick={() => setAssigning(true)}>
+              <UserPlus className="h-4 w-4" /> Assign task
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Only on my own tasks: a manager of a hundred would get a wall of them (the user, 24 Oct); the table marks new ones with a dot. */}

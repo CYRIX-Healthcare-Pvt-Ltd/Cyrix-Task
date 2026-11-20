@@ -74,18 +74,14 @@ export function TaskFields({ value, onChange, now, dueSetBy = null, scheduled, t
       </label>
       {scheduled
         ? <>
-            <div className="grid grid-cols-2 gap-3">
-              <DueField label="Scheduled date" id="sched-words" value={scheduled.value} now={now}
+            {/* Scheduled date, due date and due time: one row on a computer, two on a phone (mt_0022; the user, 20 Nov:
+                "make dates and time looks bad"). */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <DueField label="Scheduled date" id="sched-words" value={scheduled.value} now={now} words={false}
                 onChange={d => { scheduled.onChange(d); if (d && value.due < d) set('due')(d) }} />
-              <DueField value={value.due} onChange={set('due')} now={now} min={scheduled.value || now} />
+              <DueField value={value.due} onChange={set('due')} now={now} min={scheduled.value || now} words={false} />
+              {time && <TimePicker value={time.value} onChange={time.onChange} accent={time.accent} />}
             </div>
-            {/* A due time on an assigned task too (mt_0022; the user, 20 Nov). */}
-            {time && (
-              <div className="grid grid-cols-2 gap-3">
-                <div />
-                <TimePicker value={time.value} onChange={time.onChange} accent={time.accent} />
-              </div>
-            )}
           </>
         : time
         ? <div>
@@ -114,7 +110,7 @@ export function DueField({ value, onChange, now, setBy = null, autoFocus = false
         <span className="label">{label}</span>
         <input
           type="date"
-          className={words ? 'input sm:w-64' : 'input'}
+          className={words ? 'input sm:w-64' : 'input w-full min-w-0'}
           value={value}
           min={min}
           max={addDays(now, 366)}
