@@ -156,11 +156,12 @@ export default function TaskDialog({
 
           {manage && <p className="text-sm text-ink-600">{assigned ? 'Assigned to' : 'Entered by'} <span className="font-semibold text-ink-900">{t.employee_name}</span> · {t.employee_ecode}</p>}
 
-          {/* Notify my manager (mt_0016): the person turns it on; they or their manager can turn it off again (mt_0017). */}
-          {!assigned && t.status === 'open' && (manage || manager) && (manage ? !!t.notify_manager : true) && (
+          {/* Notify my manager (mt_0016): the person turns it on; they or their manager can turn it off again (mt_0017).
+              On a completed task too: turning it on tells the manager it was completed (mt_0021; the user, 20 Nov). */}
+          {!assigned && (manage || manager) && (manage ? !!t.notify_manager : true) && (
             <button type="button" role="switch" aria-checked={!!t.notify_manager} disabled={act.isPending}
               onClick={() => run({ fn: 'task_set_notify', args: { p_task_id: t.id, p_on: !t.notify_manager } },
-                t.notify_manager ? (manage ? `You will not be told about ${owner}’s task` : `${manager} will not be told`) : `${manager} will be told`)}
+                t.notify_manager ? (manage ? `You will not be told about ${owner}’s task` : `${manager} will not be told`) : t.status === 'open' ? `${manager} will be told` : `${manager} is told you completed it`)}
               className="btn-press flex w-full items-center gap-3 rounded-xl border border-ink-200 p-3 text-left hover:bg-ink-50 disabled:opacity-60">
               <BellRing className={t.notify_manager ? 'h-5 w-5 shrink-0 text-teal-600' : 'h-5 w-5 shrink-0 text-ink-400'} aria-hidden />
               <span className="min-w-0 flex-1 text-sm font-semibold text-ink-900">{manage ? `Notify me about ${owner}’s task` : `Notify ${manager}`}</span>
