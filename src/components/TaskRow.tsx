@@ -3,7 +3,7 @@ import { BellRing, Check, CheckCircle2, Circle, Clock3, MessageSquare, RotateCcw
 import Avatar from '@/components/Avatar'
 import { CritPill } from '@/components/Criticality'
 import { TONE_CLASS } from '@/lib/tones'
-import { closedWord, daysLate, firstName, isScheduled, lookOf, progressWord, releaseWords, shortDay, type EventKind, type Task } from '@/lib/tasks'
+import { closedWord, daysLate, firstName, isScheduled, lookOf, progressWord, progressColor, releaseWords, shortDay, timeWords, type EventKind, type Task } from '@/lib/tasks'
 
 /** What a press on the row starts: the task itself, or straight into one of its actions. */
 export type Opening = 'view' | 'complete' | 'remind' | 'approve'
@@ -98,9 +98,9 @@ export default function TaskRow({
           )}
           <CritPill value={t.criticality} />
           {isScheduled(t)
-            ? <span className={clsx(chip, TONE_CLASS.violet)} title="The person sees it, and is told, at this time">Scheduled · {releaseWords(t.due_on)}</span>
+            ? <span className={clsx(chip, TONE_CLASS.violet)} title="The person sees it, and is told, at this time">Scheduled · {releaseWords(t.release_on ?? t.due_on)}</span>
             : t.status === 'open' && t.progress === 0 && look !== 'overdue' && <span className={clsx(chip, TONE_CLASS.slate)}>Not started</span>}
-          {showDue && <span className={clsx(chip, TONE_CLASS.slate)}>Due {shortDay(t.due_on)}</span>}
+          {showDue && <span className={clsx(chip, TONE_CLASS.slate)}>Due {shortDay(t.due_on)}{t.due_at ? ` · ${timeWords(t.due_at)}` : ''}</span>}
           {look === 'overdue' && <span className={clsx(chip, TONE_CLASS.red)}>Overdue · {plural(late, 'day')}</span>}
           {look === 'waiting' && (
             <span className={clsx(chip, TONE_CLASS.amber)}>
@@ -136,7 +136,7 @@ export default function TaskRow({
         {t.status === 'open' && t.progress > 0 && (
           <div className="mt-2 flex items-center gap-2" title={`${progressWord(t.progress)} · ${t.progress}%`}>
             <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-ink-100">
-              <div className={clsx('h-full rounded-full', look === 'overdue' ? 'bg-cyrixRed-500' : 'bg-sky-500')} style={{ width: `${t.progress}%` }} />
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${t.progress}%`, background: progressColor(t.progress, look === 'overdue') }} />
             </div>
             <span className="shrink-0 text-[11px] font-semibold tabular-nums text-ink-600">{progressWord(t.progress)} · {t.progress}%</span>
           </div>
@@ -151,7 +151,7 @@ export default function TaskRow({
           aria-label={`Send ${firstName(t.employee_name)} a reminder about “${t.title}”`}
           title="Send a reminder"
         >
-          <BellRing className="h-[18px] w-[18px] text-violet-500" />
+          <BellRing className="bell-ring h-[18px] w-[18px] text-violet-500" />
         </button>
       )}
       {manage && t.status === 'done' && (

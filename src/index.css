@@ -14,7 +14,7 @@
      * Light here; dark restates the same names further down and nothing
      * else in the app has to know which one is in force.
      */
-    --canvas: 255 255 255;
+    --canvas: 243 244 247;  /* a step from the white cards, as in dark (the user, 29 Oct: light "looks blank") */
     --surface: 255 255 255;
     --on-ink: 255 255 255;
 
@@ -1553,3 +1553,61 @@
   .unseen-dot::after { animation: none; opacity: 0; }
 }
 
+
+/* The add window takes the colour of how critical the task is (mt_0016; the user, 18 Nov). */
+.dialog-panel { transition: box-shadow 400ms ease; }
+.dialog-panel[data-accent] { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 24px 64px -24px color-mix(in srgb, var(--accent) 55%, transparent); }
+.dialog-accent {
+  position: absolute; inset: 0 0 auto 0; height: 11rem; pointer-events: none;
+  background: radial-gradient(120% 100% at 50% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 72%);
+}
+.dialog-accent::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--accent); transform-origin: left; }
+@media (prefers-reduced-motion: no-preference) {
+  .dialog-accent { animation: accent-wash 520ms cubic-bezier(.2, .8, .2, 1) both; }
+  .dialog-accent::before { animation: accent-bar 560ms cubic-bezier(.2, .8, .2, 1) both; }
+  .crit-pop { animation: crit-pop 360ms cubic-bezier(.2, .8, .2, 1); }
+  .crit-bar { transform-box: fill-box; transform-origin: bottom; animation: crit-bar 420ms cubic-bezier(.2, .8, .2, 1) both; }
+  .crit-icon { animation: crit-icon 420ms cubic-bezier(.2, .8, .2, 1); }
+}
+@keyframes accent-wash { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
+@keyframes accent-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes crit-pop { 0% { transform: scale(.96); } 55% { transform: scale(1.04); } 100% { transform: scale(1); } }
+@keyframes crit-bar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes crit-icon { 0% { transform: scale(.7) rotate(-12deg); } 60% { transform: scale(1.12) rotate(4deg); } 100% { transform: none; } }
+
+/* Dashboard, By criticality on a phone: each box in its criticality's colour, washing in one after another (the user, 18 Nov). */
+.crit-card { position: relative; overflow: hidden; border-color: color-mix(in srgb, var(--accent) 32%, rgb(var(--ink-100, 226 232 240))); }
+.crit-card::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(110% 90% at 0% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%); }
+.crit-card::after { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--accent); transform-origin: left; }
+@media (prefers-reduced-motion: no-preference) {
+  .crit-card { animation: crit-card-in 480ms cubic-bezier(.2, .8, .2, 1) var(--d, 0ms) both; }
+  .crit-card::before { animation: accent-wash 620ms cubic-bezier(.2, .8, .2, 1) calc(var(--d, 0ms) + 120ms) both; }
+  .crit-card::after { animation: accent-bar 640ms cubic-bezier(.2, .8, .2, 1) calc(var(--d, 0ms) + 120ms) both; }
+  .crit-card .crit-bar { animation-delay: calc(var(--d, 0ms) + 260ms) !important; }
+}
+@keyframes crit-card-in { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+
+/* The due-time panel (TimePicker): rises from the field, or from the bottom on a phone. */
+@media (prefers-reduced-motion: no-preference) { .time-pop { animation: time-pop 260ms cubic-bezier(.2, .8, .2, 1) both; } }
+@keyframes time-pop { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: no-preference) { .ampm-in { animation: ampm-in 420ms cubic-bezier(.2, .8, .2, 1); } }
+@keyframes ampm-in { from { opacity: 0; transform: rotate(-90deg) scale(.4); } to { opacity: 1; transform: none; } }
+/* DropPick: the list drops in, its rows one after another. */
+@media (prefers-reduced-motion: no-preference) {
+  .drop-pop { animation: time-pop 200ms cubic-bezier(.2, .8, .2, 1) both; transform-origin: top; }
+  .drop-item { animation: drop-item 240ms cubic-bezier(.2, .8, .2, 1) both; }
+}
+@keyframes drop-item { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+/* Dashboard StandBar: each part of the bar drawn in from the left. */
+@media (prefers-reduced-motion: no-preference) {
+  .stand-seg { transform-origin: left; animation: accent-bar 700ms cubic-bezier(.2, .8, .2, 1) both; }
+}
+/* Remind: the bell rings on hover (the user, 18 Nov: "why no hover to shaking bell?"). */
+@media (prefers-reduced-motion: no-preference) {
+  button:hover .bell-ring, button:focus-visible .bell-ring { animation: bell-ring 700ms ease-in-out; transform-origin: 50% 10%; }
+}
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0); } 15% { transform: rotate(18deg); } 30% { transform: rotate(-16deg); }
+  45% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } 75% { transform: rotate(4deg); }
+}

@@ -1,17 +1,21 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
-import { BellRing, CalendarPlus, CalendarRange, ListChecks, Search, UserPlus, X } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { ArrowDownUp, BellRing, CalendarPlus, ListChecks, Search, UserPlus, X } from 'lucide-react'
+import DropPick from '@/components/DropPick'
+import PeriodPick from '@/components/PeriodPick'
 import TaskRow, { type Opening } from '@/components/TaskRow'
 import TaskDialog from '@/components/TaskDialog'
 import TaskTable from '@/components/TaskTable'
 import IconChip from '@/components/IconChip'
 import { AddTask } from '@/components/TaskForm'
 import AssignTask from '@/components/AssignTask'
+import { CRITICALITY, CritBars } from '@/components/Criticality'
 import { Alert, ChartLoader, EmptyState } from '@/components/ui'
 import {
   CRIT_ORDER, LOOK_DOT, LOOK_ORDER, addDays, dayInSentence, firstName, isScheduled, lookOf, monthOf, monthTitle,
   shortDay, today, useMe, usePeople, useTasks,
-  type Person, type Range, type Task,
+  type Criticality, type Person, type Range, type Task,
 } from '@/lib/tasks'
 
 /*
@@ -22,10 +26,30 @@ import {
 type View = 'all' | 'pending' | 'approved' | 'waiting'
 /** The days the board counts, after the search (the user, 24 Oct: "if I select this month so total, pending and rest should be based on that"). */
 type Period = 'this' | 'all' | 'range'
-const PERIODS: Array<[Period, string]> = [['this', 'This month'], ['all', 'All time'], ['range', 'From – To']]
 /** Given by the manager, or added by the person (the user, 24 Oct: "self assigned will be also there … how to filter it?"). */
 type Source = 'any' | 'assigned' | 'self'
-const SOURCES: Array<[Source, string]> = [['any', 'All'], ['assigned', 'Assigned'], ['self', 'Self-added']]
+const SOURCES: Array<[Source, string]> = [['assigned', 'Assigned'], ['self', 'Self-added'], ['any', 'All']]
+/** How the list is ordered (the user, 18 Nov: "sort ie newest or oldest, newest completed"). */
+type Sort = 'smart' | 'newest' | 'oldest' | 'due_soon' | 'due_late' | 'done_new' | 'done_old'
+const SORT_WORD: Record<Sort, string> = {
+  smart: 'Overdue first', newest: 'Newest added', oldest: 'Oldest added',
+  due_soon: 'Earliest due', due_late: 'Latest due', done_new: 'Newest completed', done_old: 'Oldest completed',
+}
+/** The orders that mean something on each tab, the first its own (the user, 18 Nov: "on pending tab how newest completed?"). */
+const SORTS_OF: Record<View, Sort[]> = {
+  all: ['smart', 'newest', 'oldest', 'due_soon', 'due_late'],
+  pending: ['smart', 'newest', 'oldest', 'due_soon', 'due_late'],
+  approved: ['done_new', 'done_old', 'newest', 'oldest'],
+  waiting: ['done_old', 'done_new', 'newest', 'oldest'],
+}
+const SORT_BY: Record<Exclude<Sort, 'smart'>, (a: Task, b: Task) => number> = {
+  newest: (a, b) => b.created_at.localeCompare(a.created_at),
+  oldest: (a, b) => a.created_at.localeCompare(b.created_at),
+  due_soon: (a, b) => (a.due_on + (a.due_at ?? '24')).localeCompare(b.due_on + (b.due_at ?? '24')),
+  due_late: (a, b) => (b.due_on + (b.due_at ?? '24')).localeCompare(a.due_on + (a.due_at ?? '24')),
+  done_new: (a, b) => (b.done_at ?? '').localeCompare(a.done_at ?? '') || b.created_at.localeCompare(a.created_at),
+  done_old: (a, b) => (a.done_at ?? '').localeCompare(b.done_at ?? '') || a.created_at.localeCompare(b.created_at),
+}
 type Stage = 'overdue' | 'notstarted' | 'started' | 'inprogress' | 'almost' | 'scheduled'
 const STAGES: Array<[Stage, string, string]> = [
   ['overdue', 'Overdue', LOOK_DOT.overdue],
@@ -69,17 +93,27 @@ const ALL_TIME: Range = { from: '2000-01-01', to: '2999-12-31' }
  * Assign task for the manager and Add task for the person. A search over name, description and person; the filters
  * by where each stands; From – To for the tasks due from one day to another (the user, 6 Oct).
  */
-export default function TaskBoard({ whose, heading }: { whose: Whose; heading: ReactNode }) {
+export default function TaskBoard({ whose, heading, picker }: { whose: Whose; heading: ReactNode; picker?: ReactNode }) {
   const manage = whose.team
   const person = whose.team ? whose.person : null
   const now = today()
   const { data: me } = useMe()
-  const [view, setView] = useState<View>('all')
+  // Opened from a dashboard tile (the user, 29 Oct): that tile's tab and the dashboard's period, from the address.
+  const [params] = useSearchParams()
+  const asked = params.get('view'), askedPeriod = params.get('period'), askedFrom = params.get('from'), askedTo = params.get('to')
+  const [sort, setSort] = useState<Sort>('smart')
+  const [view, setView] = useState<View>(() => (['all', 'pending', 'approved', 'waiting'].includes(asked ?? '') ? asked as View : 'all'))
   const [stage, setStage] = useState<Stage | null>(null)
   // All time first, so nothing overdue from an earlier month is out of sight.
-  const [period, setPeriod] = useState<Period>('all')
-  const [source, setSource] = useState<Source>('any')
-  const [range, setRange] = useState<Range>(() => weekOf(now))
+  const [period, setPeriod] = useState<Period>(() => (['this', 'all', 'range'].includes(askedPeriod ?? '') ? askedPeriod as Period : 'all'))
+  // A manager opens on the tasks given out, My Task on all (the user, 29 Oct); a dashboard tile opens on what it counted.
+  const [source, setSource] = useState<Source>(() => {
+    const s = params.get('source')
+    return s === 'assigned' || s === 'self' || s === 'any' ? s : manage ? 'assigned' : 'any'
+  })
+  const [range, setRange] = useState<Range>(() => (askedFrom && askedTo ? { from: askedFrom, to: askedTo } : weekOf(now)))
+  // How critical (the user, 20 Nov: "user needs criticality filter also"): every count follows it, like the search.
+  const [crit, setCrit] = useState<Criticality | 'any'>('any')
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<{ id: string; opening: Opening } | null>(null)
   const [adding, setAdding] = useState(false)
@@ -100,9 +134,10 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
     const needle = q.trim().toLowerCase()
     return tasks.filter(t => t.due_on >= days.from && t.due_on <= days.to
       && (source === 'any' || (source === 'assigned') === !!t.assigned_by_name)
+      && (crit === 'any' || t.criticality === crit)
       && (!needle || [t.title, t.details, t.remarks, t.employee_name, t.employee_ecode, t.assigned_by_name, t.done_note]
         .some(v => (v ?? '').toLowerCase().includes(needle))))
-  }, [tasks, q, days.from, days.to, source])
+  }, [tasks, q, days.from, days.to, source, crit])
 
   const { tally, stages } = useMemo(() => {
     const tally: Record<View, number> = { all: 0, pending: 0, approved: 0, waiting: 0 }
@@ -115,7 +150,17 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
     return { tally, stages }
   }, [found, now])
 
-  const list: Task[] = view === 'all'
+  // Every criticality with how many of the days, source and search have (not narrowed by itself).
+  const critOptions = useMemo(() => {
+    const base = tasks.filter(t => t.due_on >= days.from && t.due_on <= days.to && !isScheduled(t)
+      && (source === 'any' || (source === 'assigned') === !!t.assigned_by_name))
+    return [
+      { key: 'any' as const, word: 'All levels', count: base.length, mark: <CritBars value="critical" className="h-3.5 w-3.5 !text-ink-400" /> },
+      ...CRITICALITY.map(c => ({ key: c.value, word: c.word, count: base.filter(t => t.criticality === c.value).length, mark: <CritBars value={c.value} className="h-3.5 w-3.5" /> })),
+    ]
+  }, [tasks, days.from, days.to, source])
+
+  const listed: Task[] = view === 'all'
       ? found.filter(t => !isScheduled(t)).sort(byLookThenDue(now))
       : view === 'approved'
         ? found.filter(t => t.status === 'approved').sort((a, b) => (b.done_at ?? '').localeCompare(a.done_at ?? ''))
@@ -124,13 +169,12 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
           // Pending, with the scheduled ones at the end.
           : found.filter(t => t.status === 'open' && (!stage || stageOf(t, now) === stage))
             .sort((a, b) => Number(isScheduled(a)) - Number(isScheduled(b)) || byLookThenDue(now)(a, b))
+  // A tab's own order is the list as it comes; an order not offered on this tab falls back to it.
+  const sortNow: Sort = SORTS_OF[view].includes(sort) ? sort : SORTS_OF[view][0]
+  const list = sortNow === 'smart' ? listed : [...listed].sort(SORT_BY[sortNow])
   const fresh = tasks.filter(t => t.unseen > 0).sort(byDue)
   const openTask = open ? tasks.find(t => t.id === open.id) ?? null : null
 
-  const typeEnd = (end: 'from' | 'to', d: string) => {
-    if (!d) return
-    setRange(r => (end === 'from' ? { from: d, to: r.to < d ? d : r.to } : { from: r.from > d ? d : r.from, to: d }))
-  }
   const onOpen = (t: Task, opening: Opening = 'view') => setOpen({ id: t.id, opening })
   const row = (t: Task, showDue: boolean) => (
     <TaskRow key={t.id} task={t} manage={manage} now={now} showDue={showDue} showOwner={manage} managerName={me?.manager_name} onOpen={onOpen} />
@@ -151,25 +195,25 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
   const whom = manage ? (person ? ` for ${firstName(person.full_name)}` : ' for your team') : ''
   const plural = (n: number) => `${n} ${n === 1 ? 'task' : 'tasks'}`
   const when = period === 'all' ? '' : period === 'this' ? ` due in ${monthTitle(monthOf(now))}` : range.from === range.to ? ` due ${dayInSentence(range.from, now)}` : ` due from ${shortDay(range.from)} to ${shortDay(range.to)}`
-  const pill = (on: boolean) => clsx(
-    'btn-press flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-medium',
-    on ? 'border-ink-900 bg-ink-900 text-onInk' : 'border-ink-200 bg-surface text-ink-700 hover:bg-ink-50',
-  )
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         {heading}
-        {!manage && (
-          <button type="button" className="btn-primary" onClick={() => setAdding(true)}>
-            <CalendarPlus className="h-4 w-4" /> Add task
-          </button>
-        )}
-        {manage && (people?.length ?? 0) > 0 && (
-          <button type="button" className="btn-primary" onClick={() => setAssigning(true)}>
-            <UserPlus className="h-4 w-4" /> Assign task
-          </button>
-        )}
+        {/* Whose tasks and Assign task side by side, on a phone too (the user, 20 Nov: "make it same row"). */}
+        <div className={picker ? 'flex w-full items-center gap-2 sm:w-auto' : 'contents'}>
+          {picker && <div className="min-w-0 flex-1 sm:w-72 sm:flex-none">{picker}</div>}
+          {!manage && (
+            <button type="button" className="btn-primary" onClick={() => setAdding(true)}>
+              <CalendarPlus className="h-4 w-4" /> Add task
+            </button>
+          )}
+          {manage && (people?.length ?? 0) > 0 && (
+            <button type="button" className="btn-primary shrink-0" onClick={() => setAssigning(true)}>
+              <UserPlus className="h-4 w-4" /> Assign task
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Only on my own tasks: a manager of a hundred would get a wall of them (the user, 24 Oct); the table marks new ones with a dot. */}
@@ -184,57 +228,18 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
       )}
 
       <div className="space-y-3">
-        {/* The search (the user, 24 Oct: "need search bar also"), and beside it the days the board counts. */}
-        {/* One row on a computer: the search, the days, and From and To right after it; on a phone each the full width. */}
+        {/* One toolbar row on a computer: the search, the days, Assigned or self-added, and the order, all one height
+            (the user, 18 Nov: "is there any better idea"); on a phone each the full width, then the drop-downs. */}
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-        <label className="relative block min-w-0 lg:max-w-sm lg:flex-1">
+        <label className="relative block min-w-0 lg:min-w-[8rem] lg:flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" aria-hidden />
           <input className="input !pl-9 !pr-9" value={q} onChange={e => setQ(e.target.value)} placeholder={manage ? 'Task, person or E-code' : 'Search your tasks'} aria-label="Search tasks" />
           {q && (
             <button type="button" onClick={() => setQ('')} className="btn-icon absolute right-1 top-1/2 -translate-y-1/2" aria-label="Clear the search"><X className="h-4 w-4" /></button>
           )}
         </label>
-        <div role="radiogroup" aria-label="Which days" className="grid grid-cols-3 rounded-lg border border-ink-200 bg-surface p-0.5 lg:inline-grid lg:shrink-0">
-          {PERIODS.map(([p, word]) => (
-            <button key={p} type="button" role="radio" aria-checked={period === p} onClick={() => setPeriod(p)}
-              className={clsx('btn-press inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium', period === p ? 'bg-ink-900 text-onInk' : 'text-ink-600 hover:bg-ink-50')}>
-              {p === 'range' && <CalendarRange className="h-4 w-4" aria-hidden />}{word}
-            </button>
-          ))}
-        </div>
-        {period === 'range' && (
-          <div className="grid grid-cols-2 gap-2 lg:flex lg:items-center" role="group" aria-label="Days from one to another">
-            <label className="flex min-w-0 items-center gap-2">
-              <span className="label !mb-0 shrink-0">From</span>
-              <input type="date" className="input !py-1.5 lg:w-36" value={range.from} onChange={e => typeEnd('from', e.target.value)} />
-            </label>
-            <label className="flex min-w-0 items-center gap-2">
-              <span className="label !mb-0 shrink-0">To</span>
-              <input type="date" className="input !py-1.5 lg:w-36" value={range.to} onChange={e => typeEnd('to', e.target.value)} />
-            </label>
-          </div>
-        )}
-        </div>
-
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-        <div className="nav-scroll -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0" role="group" aria-label="Which tasks to show">
-          {PILLS.map(([v, word, dot]) => {
-            const on = view === v
-            return (
-              <div key={v} className="contents">
-                <button type="button" aria-pressed={on} onClick={() => { setView(on ? 'all' : v); setStage(null) }} className={pill(on)}>
-                  {v === 'all'
-                    ? <ListChecks className={clsx('h-4 w-4', on ? 'text-onInk' : 'text-ink-500')} aria-hidden />
-                    : <span className={clsx('h-2 w-2 rounded-full', dot)} aria-hidden />}
-                  {word}
-                  <span className={clsx('tabular-nums', on ? 'text-onInk/80' : 'text-ink-400')}>{tally[v]}</span>
-                </button>
-              </div>
-            )
-          })}
-        </div>
-
-        <div role="radiogroup" aria-label="Assigned or self-added" className="grid grid-cols-3 rounded-lg border border-ink-200 bg-surface p-0.5 lg:ml-auto lg:inline-grid lg:shrink-0">
+        <PeriodPick className="lg:shrink-0" period={period} onPeriod={setPeriod} range={range} onRange={setRange} />
+        <div role="radiogroup" aria-label="Assigned or self-added" className="grid grid-cols-3 rounded-lg border border-ink-200 bg-surface p-0.5 lg:inline-grid lg:shrink-0">
           {SOURCES.map(([k, word]) => (
             <button key={k} type="button" role="radio" aria-checked={source === k} onClick={() => setSource(k)}
               className={clsx('btn-press whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium', source === k ? 'bg-ink-900 text-onInk' : 'text-ink-600 hover:bg-ink-50')}>
@@ -242,20 +247,62 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
             </button>
           ))}
         </div>
+        <DropPick label="How critical" value={crit} onChange={setCrit} className="max-sm:hidden lg:w-36 lg:shrink-0" options={critOptions} />
+        <DropPick label="Sort" value={sortNow} onChange={setSort} align="right" className="max-sm:hidden lg:w-40 lg:shrink-0"
+          icon={<ArrowDownUp className="h-4 w-4 shrink-0 text-ink-500" aria-hidden />}
+          options={SORTS_OF[view].map(k => ({ key: k, word: SORT_WORD[k] }))} />
         </div>
 
-        {/* Inside Pending: each stage with how many; a press shows only those, again shows all pending. */}
+        {/* On a phone the pills become a drop-down, with the order beside it (the user, 18 Nov); on a computer the order sits at the end of the pills. */}
+        <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-2 sm:hidden">
+          <DropPick label="Which tasks" value={view} onChange={v => { setView(v); setStage(null); setSort(SORTS_OF[v][0]) }}
+            options={PILLS.map(([v, word, dot]) => ({
+              key: v, word, count: tally[v],
+              mark: v === 'all' ? <ListChecks className="h-4 w-4 shrink-0 text-ink-500" aria-hidden /> : <span className={clsx('h-2 w-2 shrink-0 rounded-full', dot)} aria-hidden />,
+            }))} />
+          <DropPick label="How critical" value={crit} onChange={setCrit} align="right" options={critOptions} />
+          <DropPick label="Sort" value={sortNow} onChange={setSort} align="right" compact
+            icon={<ArrowDownUp className="h-4 w-4 shrink-0 text-ink-500" aria-hidden />}
+            options={SORTS_OF[view].map(k => ({ key: k, word: SORT_WORD[k] }))} />
+        </div>
+
+        {/* On a computer, which tasks as tabs with their counts; a tab with none is greyed. */}
+        <div role="tablist" aria-label="Which tasks to show" className="flex flex-wrap gap-x-6 border-b border-ink-100 max-sm:hidden">
+          {PILLS.map(([v, word, dot]) => {
+            const on = view === v
+            return (
+              <button key={v} type="button" role="tab" aria-selected={on} onClick={() => { setView(v); setStage(null); setSort(SORTS_OF[v][0]) }}
+                className={clsx('btn-press -mb-px flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 pb-2.5 pt-1 text-sm transition-colors',
+                  on ? 'border-ink-900 font-semibold text-ink-900' : 'border-transparent font-medium text-ink-500 hover:text-ink-800',
+                  !on && tally[v] === 0 && 'opacity-55')}>
+                {v === 'all' ? <ListChecks className="h-4 w-4" aria-hidden /> : <span className={clsx('h-2 w-2 rounded-full', dot)} aria-hidden />}
+                {word}
+                <span className="rounded-full bg-ink-100 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-ink-700">{tally[v]}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Inside Pending: the stages with a task in them, and the one chosen; a press shows only those. */}
         {view === 'pending' && (
-          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Pending by stage">
-            {STAGES.map(([k, word, dot]) => {
-              const on = stage === k
+          <DropPick label="Stage" className="sm:hidden" value={stage ?? 'any'} onChange={k => setStage(k === 'any' ? null : k)}
+            options={[
+              { key: 'any' as const, word: 'All pending', count: tally.pending, mark: <span className={clsx('h-2 w-2 shrink-0 rounded-full', LOOK_DOT.todo)} aria-hidden /> },
+              // Only the stages with a task in them, and the one chosen (the user, 18 Nov: "show only with more than 0").
+              ...STAGES.filter(([k]) => stages[k] > 0 || stage === k).map(([k, word, dot]) => ({ key: k, word, count: stages[k], mark: <span className={clsx('h-2 w-2 shrink-0 rounded-full', dot)} aria-hidden /> })),
+            ]} />
+        )}
+        {view === 'pending' && (
+          <div className="flex flex-wrap items-center gap-1.5 max-sm:hidden" role="group" aria-label="Pending by stage">
+            {([['any', 'All pending', LOOK_DOT.todo, tally.pending], ...STAGES.filter(([k]) => stages[k] > 0 || stage === k).map(([k, w, d]) => [k, w, d, stages[k]])] as Array<[Stage | 'any', string, string, number]>).map(([k, word, dot, n]) => {
+              const on = (stage ?? 'any') === k
               return (
-                <button key={k} type="button" aria-pressed={on} onClick={() => setStage(on ? null : k)}
-                  className={clsx('btn-press inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 transition-colors',
-                    on ? 'bg-ink-900 text-onInk ring-ink-900' : 'bg-ink-50 text-ink-700 ring-ink-200 hover:bg-ink-100',
-                    !on && k === 'overdue' && stages.overdue > 0 && 'text-cyrixRed-700')}>
+                <button key={k} type="button" aria-pressed={on} onClick={() => setStage(k === 'any' ? null : k)}
+                  className={clsx('btn-press inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors',
+                    on ? 'border-ink-900 text-ink-900' : 'border-ink-200 text-ink-600 hover:bg-ink-50',
+                    !on && k === 'overdue' && 'text-cyrixRed-700')}>
                   <span className={clsx('h-1.5 w-1.5 rounded-full', dot)} aria-hidden />{word}
-                  <span className={clsx('tabular-nums', on ? 'text-onInk/80' : 'text-ink-400')}>{stages[k]}</span>
+                  <span className="tabular-nums text-ink-400">{n}</span>
                 </button>
               )
             })}
@@ -268,7 +315,7 @@ export default function TaskBoard({ whose, heading }: { whose: Whose; heading: R
         <div>
           <h2 className="text-lg font-semibold text-ink-900">{view === 'pending' && stage ? `Pending · ${stageWord}` : PILLS.find(([v]) => v === view)![1]}</h2>
           <p className="text-sm text-ink-500">
-            {`${plural(list.length)}${whom}${when}${view === 'approved' ? ', latest first' : ''}${q.trim() ? ` matching “${q.trim()}”` : ''}`}
+            {`${plural(list.length)}${whom}${when}${view === 'approved' && sort === 'smart' ? ', latest first' : ''}${q.trim() ? ` matching “${q.trim()}”` : ''}`}
           </p>
         </div>
 

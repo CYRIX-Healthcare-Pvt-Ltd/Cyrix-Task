@@ -19,6 +19,12 @@ export interface Task {
   details: string | null
   /** "2026-10-07" */
   due_on: string
+  /** The day it reaches the person at 9 AM (mt_0014). */
+  release_on?: string
+  /** "17:30:00"; null = any time that day (mt_0016). */
+  due_at?: string | null
+  /** The owner's own task: their manager is told when it is added, completed and overdue (mt_0016). */
+  notify_manager?: boolean
   /** The first name of the manager who last changed the due date; null while it is the person's own. Once set, only the manager changes it (mt_0005). */
   due_set_by: string | null
   criticality: Criticality
@@ -51,6 +57,9 @@ export interface Task {
 
 /** The steps of progress, as the person picks them (the user, 24 Oct: "if selected in progress we can show 50%"). */
 export const PROGRESS: Array<[number, string]> = [[0, 'Not started'], [25, 'Started'], [50, 'In progress'], [75, 'Almost done']]
+/** The bar's colour by how far it is, as the stage dots: started light blue, in progress blue, almost done indigo; red when overdue (the user, 18 Nov: "why the bar color is not based on the %?"). */
+export const progressColor = (p: number, overdue = false): string =>
+  overdue ? 'rgb(239 68 68)' : p >= 100 ? 'rgb(34 197 94)' : p >= 75 ? 'rgb(99 102 241)' : p >= 50 ? 'rgb(14 165 233)' : p >= 25 ? 'rgb(125 211 252)' : 'rgb(148 163 184)'
 export const progressWord = (p: number) => PROGRESS.find(([v]) => v === p)?.[1] ?? 'Not started'
 /** When an assigned task reaches the person: 9 AM, India, on its day (mt_0010). */
 export const releaseAt = (due: string) => Date.parse(`${due}T09:00:00+05:30`)
@@ -58,9 +67,13 @@ export const releaseAt = (due: string) => Date.parse(`${due}T09:00:00+05:30`)
  * Assigned for later and not yet with the person: the manager sees it as Scheduled; it counts in nothing until then
  * (the user, 24 Oct: "show in pending, but for calculation don't use future tasks").
  */
-export const isScheduled = (t: Pick<Task, 'assigned_by_name' | 'status' | 'due_on'>, at = Date.now()) =>
-  !!t.assigned_by_name && t.status === 'open' && at < releaseAt(t.due_on)
+export const isScheduled = (t: Pick<Task, 'assigned_by_name' | 'status' | 'due_on' | 'release_on'>, at = Date.now()) =>
+  !!t.assigned_by_name && t.status === 'open' && at < releaseAt(t.release_on ?? t.due_on)
 /** "27 Oct, 9 AM" */
+/** Hours from when the task reached the person — 9 AM on its scheduled date, if later than when it was added (the user, 29 Oct) — to marking it complete. */
+export const tatHours = (t: Pick<Task, 'created_at' | 'done_at' | 'release_on' | 'assigned_by_name'>): number | null =>
+  t.done_at ? Math.max(0, Date.parse(t.done_at) - Math.max(Date.parse(t.created_at), t.assigned_by_name && t.release_on ? releaseAt(t.release_on) : 0)) / 3_600_000 : null
+
 export const releaseWords = (due: string) => `${shortDay(due)}, 9 AM`
 
 /** Approved for an assigned task; completed for one the person added, which needs no approval (mt_0007). */
@@ -92,6 +105,9 @@ export interface Person {
   ecode: string
   designation: string | null
   avatar: string | null
+  /** Whom they report to: everyone below me is here, not only my own reportees (mt_0013). */
+  manager_id?: string | null
+  manager_name?: string | null
 }
 
 /* ------------------------------------------------------------------ */
@@ -168,10 +184,21 @@ export function dayInSentence(day: string, now = today()): string {
 /** What the person sees a task as: to do, overdue, waiting for approval, or approved. */
 export type Look = 'todo' | 'overdue' | 'waiting' | 'approved'
 
-export function lookOf(t: Pick<Task, 'status' | 'due_on'>, now = today()): Look {
+export function lookOf(t: Pick<Task, 'status' | 'due_on'> & { due_at?: string | null }, now = today()): Look {
   if (t.status === 'approved') return 'approved'
   if (t.status === 'done') return 'waiting'
+  // A due time (mt_0016) makes it overdue from that time on its day; without one the whole day is allowed.
+  if (t.due_on === now && t.due_at && now === today() && clockNow() > t.due_at.slice(0, 5)) return 'overdue'
   return t.due_on < now ? 'overdue' : 'todo'
+}
+
+/** "14:05", India time. */
+export const clockNow = (): string => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })
+
+/** "17:30:00" → "5:30 pm" */
+export function timeWords(t: string): string {
+  const [h, m] = t.split(':').map(Number)
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`
 }
 
 export const LOOK_TONE: Record<Look, Tone> = { todo: 'sky', overdue: 'red', waiting: 'amber', approved: 'green' }
@@ -261,8 +288,8 @@ export function useHistory(taskId: string | null) {
 /* ------------------------------------------------------------------ */
 
 export type Action =
-  | { fn: 'task_add'; args: { p_title: string; p_details: string; p_due_on: string; p_criticality: Criticality } }
-  | { fn: 'task_edit'; args: { p_task_id: string; p_title: string; p_details: string; p_due_on: string } }
+  | { fn: 'task_add'; args: { p_title: string; p_details: string; p_due_on: string; p_criticality: Criticality; p_due_at: string | null; p_notify_manager: boolean } }
+  | { fn: 'task_edit'; args: { p_task_id: string; p_title: string; p_details: string; p_due_on: string; p_due_at?: string | null; p_set_time?: boolean } }
   | { fn: 'task_set_criticality'; args: { p_task_id: string; p_criticality: Criticality } }
   | { fn: 'task_set_due'; args: { p_task_id: string; p_due_on: string } }
   | { fn: 'task_reopen'; args: { p_task_id: string; p_note: string; p_due_on: string | null } }
@@ -273,8 +300,9 @@ export type Action =
   | { fn: 'task_send_back'; args: { p_task_id: string; p_note: string } }
   | { fn: 'task_delete'; args: { p_task_id: string } }
   | { fn: 'task_seen'; args: { p_task_id: string } }
-  | { fn: 'task_progress'; args: { p_task_id: string; p_progress: number } }
-  | { fn: 'task_assign'; args: { p_people: string[]; p_title: string; p_details: string; p_due_on: string; p_criticality: Criticality; p_remarks: string } }
+  | { fn: 'task_progress'; args: { p_task_id: string; p_progress: number; p_note: string } }
+  | { fn: 'task_set_notify'; args: { p_task_id: string; p_on: boolean } }
+  | { fn: 'task_assign'; args: { p_people: string[]; p_title: string; p_details: string; p_due_on: string; p_criticality: Criticality; p_remarks: string; p_release_on: string; p_due_at: string | null } }
 
 /** Every change goes through one of the database's task functions, and then everything shown is read again. */
 export function useTaskAction() {

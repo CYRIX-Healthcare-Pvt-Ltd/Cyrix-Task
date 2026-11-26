@@ -8,13 +8,22 @@
   ],
   "rewrites": [
     {
-      "source": "/tasks/((?!assets/|favicon).*)",
+      "source": "/tasks/((?!assets/|favicon|outlook).*)",
       "destination": "/tasks/index.html"
     }
   ],
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/tasks/outlook(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Content-Security-Policy", "value": "frame-ancestors 'self' https://outlook.office.com https://outlook.office365.com https://outlook.live.com https://*.outlook.com https://*.office.com https://*.office365.com https://*.officeapps.live.com" },
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" }
+      ]
+    },
+    {
+      "source": "/((?!tasks/outlook).*)",
       "headers": [
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },

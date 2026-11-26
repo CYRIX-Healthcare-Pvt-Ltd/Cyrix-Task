@@ -2,6 +2,8 @@
 import './lib/safeStorage'
 import { startSessionGuard } from './lib/sessionGuard'
 import { startIdleSignOut } from './lib/idleSignOut'
+import { startMaintenance } from './lib/maintenance'
+import { startErrorReporting } from './lib/reportErrors'
 import { supabase } from './lib/supabase'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
@@ -12,6 +14,19 @@ import { startTheme } from '@/lib/theme'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import App from './App'
 import './index.css'
+
+/*
+  A number box changes only by typing: the mouse wheel over a focused one changed its value (Travel, 22 Oct;
+  every app 13 Nov: "when scrolling numbers are changing ... we dont need"). The box lets go as the wheel turns,
+  so the page scrolls, and the up and down arrow keys do nothing.
+*/
+document.addEventListener('wheel', () => {
+  const el = document.activeElement
+  if (el instanceof HTMLInputElement && el.type === 'number') el.blur()
+}, { passive: true })
+document.addEventListener('keydown', e => {
+  if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.target instanceof HTMLInputElement && e.target.type === 'number') e.preventDefault()
+})
 
 // Before render, so nobody sees a flash of the wrong palette, and so a
 // choice made in another module is already in force when this one opens.
@@ -33,6 +48,9 @@ const queryClient = new QueryClient({
 startSessionGuard()
 // Signed out after 3 hours with nothing done, across every Cyrix app.
 startIdleSignOut(supabase)
+startMaintenance(supabase, 'tasks')
+// Errors people hit, to app.cyrix.in/ops (KPI 0230).
+startErrorReporting(supabase, 'tasks', import.meta.env.VITE_VERCEL_GIT_COMMIT_SHA?.slice(0, 7))
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

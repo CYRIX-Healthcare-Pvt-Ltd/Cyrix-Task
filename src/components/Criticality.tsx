@@ -35,22 +35,22 @@ export const CRITICALITY: Array<{ value: Criticality; word: string; level: 1 | 2
 export const critOf = (c: Criticality) => CRITICALITY.find(x => x.value === c) ?? CRITICALITY[1]
 
 /** Three bars rising left to right, lit up to the level. */
-export function CritBars({ value, className }: { value: Criticality; className?: string }) {
+export function CritBars({ value, className, rise = false }: { value: Criticality; className?: string; rise?: boolean }) {
   const c = critOf(value)
   return (
     <svg viewBox="0 0 12 12" aria-hidden className={clsx('shrink-0', c.bars, className)}>
       {[4, 7, 10].map((h, i) => (
-        <rect key={h} x={1 + i * 3.75} y={11 - h} width="2.5" height={h} rx="0.8" className={i < c.level ? 'fill-current' : 'fill-ink-200'} />
+        <rect key={h} x={1 + i * 3.75} y={11 - h} width="2.5" height={h} rx="0.8" className={clsx(i < c.level ? 'fill-current' : 'fill-ink-200', rise && i < c.level && 'crit-bar')} style={rise ? { animationDelay: `${i * 70}ms` } : undefined} />
       ))}
     </svg>
   )
 }
 
-export function CritPill({ value, className }: { value: Criticality; className?: string }) {
+export function CritPill({ value, className, rise = false }: { value: Criticality; className?: string; rise?: boolean }) {
   const c = critOf(value)
   return (
     <span className={clsx('inline-flex items-center gap-1 rounded-full border bg-surface px-2 py-0.5 text-[11px] font-semibold', c.pill, className)}>
-      <CritBars value={value} className="h-3 w-3" />
+      <CritBars value={value} rise={rise} className="h-3 w-3" />
       {c.word}
     </span>
   )
@@ -80,10 +80,10 @@ export function CritPicker({
             className={clsx(
               // On a phone the bars sit over the word: three words side by side in a third of a phone each, "Non-critical" did not fit.
               'btn-press flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-1.5 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60 sm:flex-row sm:gap-1.5 sm:px-2',
-              on ? c.on : 'border-ink-200 bg-surface text-ink-700 hover:bg-ink-50',
+              on ? clsx(c.on, 'crit-pop') : 'border-ink-200 bg-surface text-ink-700 hover:bg-ink-50',
             )}
           >
-            <CritBars value={c.value} className="h-3.5 w-3.5" />
+            <CritBars key={String(on)} value={c.value} rise={on} className="h-3.5 w-3.5" />
             <span className="max-w-full truncate">{c.word}</span>
           </button>
         )
