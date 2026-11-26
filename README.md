@@ -42,11 +42,20 @@ Supabase, not here.
 
 ## Database
 
-Migrations are in `supabase/migrations` (`mt_0001` … `mt_0012`), applied by
+Migrations are in `supabase/migrations` (`mt_0001` … `mt_0023` as of 26 Nov 2026), applied by
 hand one at a time, in order. They create My Task's own tables and functions
 and read shared ones (`employees`, `employee_modules`). Changes this module
 needs in shared objects (device notifications, `task_mail_call`) are KPI
 migrations (0220–0222).
+
+| Migrations | What they cover |
+|---|---|
+| mt_0001–mt_0006 | Tasks, history, the dashboard, the `tasks` module for everybody |
+| mt_0007–mt_0012 | Assigning, approval, progress, release at 9 AM, mail |
+| mt_0013–mt_0015 | The whole line below a manager, a scheduled date, My team is my reportees |
+| mt_0016–mt_0017, mt_0019–mt_0022 | A due time; Notify my manager, which the manager can switch off |
+| mt_0018 | The history says what changed to what |
+| mt_0023 | Every change of stage needs a note |
 
 ## Deploy
 
@@ -74,18 +83,25 @@ npm test         # Vitest (src/lib/*.test.ts)
   (which closes it) or sends it back with a reason, and it is to do again
   (mt_0007). The manager can reopen any completed task, with a reason and, if
   more time is needed, a new due date.
-- **The manager can assign a task** to one, several or all of the people who
-  report to them (mt_0007). Each gets their own copy, "Assigned by …"; its
+- **The manager can assign a task** to anyone below them in the reporting
+  line, not only direct reports (mt_0007, mt_0013), optionally for a scheduled
+  date (mt_0014) and with a due time (mt_0022). Each gets their own copy, "Assigned by …"; its
   name, description, due date and criticality stay as the manager set them,
   and the person updates its **progress** (0, 25, 50, 75%, then complete).
-  A change of progress is news to the manager (mt_0008).
+  A change of progress is news to the manager (mt_0008), and every change of
+  stage needs a note of what was done (mt_0023).
+- **A due time** is optional; a task with only a date is due all that day
+  (mt_0016).
+- **Notify my manager** (mt_0016 onward): the person can turn it on for a task,
+  so the manager's bell and phone ring when it is added, completed or overdue;
+  the manager can switch it off (mt_0017).
 - **A task assigned for a later day** shows in the manager's list at once but
   reaches the person only at 9 AM on that day, when it is also mailed to them
   (mt_0009, mt_0010).
 - **A task not completed by its due date is overdue**: it comes forward to the
   top of Today, in red, saying for how many days.
-- **The reporting manager** — the direct one, as `employees.reporting_manager_id`
-  says — sees the tasks of the people who report to them on **My Team Task**,
+- **The manager** sees on **My Team Task** the tasks of their direct
+  reportees, plus the ones they assigned to anyone further down (mt_0015),
   each with who entered it (name and E-code), for everyone or one person. On
   each they can comment, send a reminder, change how critical it is and its
   due date, approve or send back a completed one, reopen an approved one, and
@@ -94,7 +110,8 @@ npm test         # Vitest (src/lib/*.test.ts)
 - **Who may change what:** the person changes their task (name, description,
   due date, how critical) while it is to do; the manager changes how critical
   it is and its due date until it is approved. Once the manager has changed
-  either, only the manager changes it again. Only the manager deletes, and a
+  either, only the manager changes it again. The history shows each change as
+  was and now (mt_0018). Only the manager deletes, and a
   deletion is written to the audit log with the task's whole history first.
 - **Comments:** both comment while the task is to do. Once the person marks
   it complete it is with the manager, and only the manager comments, until
@@ -123,6 +140,13 @@ npm test         # Vitest (src/lib/*.test.ts)
 | Dashboard | `/` | everybody (a manager also sees by person) |
 | My Task | `/my-task` | everybody |
 | My Team Task | `/team` | reporting managers |
+| Outlook add-in, Make task | `/tasks/outlook.html` | everybody, inside Outlook |
+
+**The Outlook add-in** (`src/outlook/main.tsx`, `public/outlook/manifest.xml`,
+since 26 Nov 2026) shows a panel beside an open mail that fills My Task's form
+from the mail's subject. It signs in with the employee code once, inside the
+panel, and keeps no copy of the mail. `vercel.json` (here and in the portal)
+lets only `/tasks/outlook*` be framed by Outlook.
 
 ## Related docs
 
