@@ -41,24 +41,55 @@ function readMail(): Promise<Mail | null> {
 
 /* The user, 26 Nov ("why details like this?"): only the latest message — no earlier mails of the thread, no
    "Dear …," greeting, no "Regards …" signature — under one short line of who sent it and when. */
-const QUOTED = [/^\s*(From|Sent|De|Von)\s*:/i, /^\s*-{2,}\s*Original Message/i, /^\s*On .+wrote:\s*$/i, /^\s*_{8,}\s*$/]
+const QUOTED = [/^\s*(From|Sent|De|Von)\s*:/i, /^\s*-{2,}\s*(Original|Forwarded) Message/i, /^\s*On .+wrote:\s*$/i, /^\s*_{8,}\s*$/]
 const GREETING = /^\s*(dear|hi|hello|hai|hey|respected|good (morning|afternoon|evening))\b[^\n]{0,50}$/i
-const SIGN_OFF = /^\s*(thanks\s*(and|&|n)\s*regards|regards|best regards|warm regards|kind regards|with regards|best wishes|sincerely|yours (truly|faithfully|sincerely))/i
+const SIGN_OFF = /^\s*(thanks\s*(and|&|n)\s*regards|thanks\s*[,.!]?\s*$|thank you\s*[,!]?\s*$|regards|best regards|warm regards|kind regards|with regards|best wishes|sincerely|yours (truly|faithfully|sincerely))/i
+/* Company notices at the foot of a mail (26 Nov: "still same" — a confidentiality notice filled Details). */
+const NOTICE = /(disclaimer|intended recipient|confidential(ity)? notice|confidential or privileged|privileged (and confidential|information)|strictly prohibited|virus(es)? (free|scan)|think before you print|consider the environment)/i
+/* An "external sender" warning some mail servers put on top. */
+const BANNER = /^\s*(\[?external\]?|caution\s*:|warning\s*:)/i
 
-function latestMessage(text: string): string {
-  let lines = text.replace(/\r/g, '').replace(/ /g, ' ').split('\n')
-  const cut = lines.findIndex((l, i) => i > 0 && QUOTED.some(r => r.test(l)))
-  if (cut > 0) lines = lines.slice(0, cut)
-  const first = lines.findIndex(l => l.trim())
-  if (first >= 0 && GREETING.test(lines[first])) lines.splice(first, 1)
-  const sign = lines.findIndex(l => SIGN_OFF.test(l))
+/** One mail of the thread, cleaned: greeting, sign-off and footer notices taken off. */
+function cleanPart(lines: string[]): string {
+  lines = [...lines]
+  while (lines.length && (!lines[0].trim() || BANNER.test(lines[0]))) lines.shift()
+  if (lines.length && GREETING.test(lines[0])) lines.shift()
+  // a short "Thanks" line is the message itself when nothing comes before it
+  const sign = lines.findIndex((l, i) => SIGN_OFF.test(l) && lines.slice(0, i).some(x => x.trim()))
   if (sign >= 0) lines = lines.slice(0, sign)
+  const notice = lines.findIndex(l => NOTICE.test(l))
+  if (notice >= 0) lines = lines.slice(0, notice)
   return lines.map(l => l.trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
+/** The newest words of the mail; a forward with nothing typed above it gives the forwarded mail instead. */
+function latestMessage(text: string): string {
+  const lines = text.replace(/\r/g, '').replace(/ /g, ' ').split('\n')
+  // a quoted mail opens with a marker and its From/Sent/To/Subject lines; those lines stay with it
+  const HEAD = /^\s*(From|Sent|To|Cc|Subject|Date|De|Von|An|Betreff)\s*:/i
+  const parts: { head: boolean; lines: string[] }[] = [{ head: false, lines: [] }]
+  lines.forEach((l, i) => {
+    const cur = parts[parts.length - 1]
+    if (i > 0 && QUOTED.some(r => r.test(l))) {
+      if (!cur.head || cur.lines.some(x => x.trim() && !HEAD.test(x) && !QUOTED.some(r => r.test(x)))) parts.push({ head: true, lines: [] })
+      return
+    }
+    if (cur.head && (HEAD.test(l) || (!l.trim() && !cur.lines.some(x => x.trim())))) return
+    cur.lines.push(l)
+  })
+  for (const p of parts) {
+    const c = cleanPart(p.lines)
+    if (c) return c
+  }
+  return ''
+}
+
+/** The mail's subject without the Re: / Fwd: in front. */
+const titleOf = (s: string) => s.replace(/^\s*((re|fw|fwd|aw|wg)\s*:\s*)+/i, '').trim()
+
 function detailsOf(m: Mail): string {
-  const head = [m.from && `From ${m.from}`, m.when].filter(Boolean).join(', ')
-  const all = [head, latestMessage(m.text)].filter(Boolean).join('\n\n')
+  // the user, 26 Nov: "i need mail body only" — no From / date line
+  const all = latestMessage(m.text)
   return all.length > 3000 ? `${all.slice(0, 3000)}…` : all
 }
 
@@ -92,7 +123,7 @@ function MakeTask({ mail }: { mail: Mail | null }) {
   const [me, setMe] = useState<Me | null>(null)
   const [notify, setNotify] = useState(false)
   const [who, setWho] = useState('me')
-  const [title, setTitle] = useState(mail?.subject ?? '')
+  const [title, setTitle] = useState(titleOf(mail?.subject ?? ''))
   const [details, setDetails] = useState(mail ? detailsOf(mail) : '')
   const [due, setDue] = useState(today())
   const [crit, setCrit] = useState<Criticality | null>(null)
