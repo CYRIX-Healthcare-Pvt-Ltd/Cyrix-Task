@@ -16,6 +16,8 @@ export default defineConfig({
   build: {
     outDir: 'dist/tasks',
     emptyOutDir: true,
+    // Outlook → Make task panel (the user, 26 Nov): its own page beside the app.
+    rollupOptions: { input: { main: path.resolve(__dirname, 'index.html'), outlook: path.resolve(__dirname, 'outlook.html') } },
   },
   server: { port: 5179 },
   test: {
