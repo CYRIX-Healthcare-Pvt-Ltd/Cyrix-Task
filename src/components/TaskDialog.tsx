@@ -266,7 +266,7 @@ export default function TaskDialog({
       )}
 
       {step === 'edit' && (
-        <EditForm task={t} now={now} busy={act.isPending} error={error} onBack={back}
+        <EditForm task={t} now={now} busy={act.isPending} error={error} onBack={back} onDelete={() => go('delete')}
           onSubmit={async (f, time) => { if (await run({ fn: 'task_edit', args: { p_task_id: t.id, p_title: f.title, p_details: f.details, p_due_on: f.due, p_due_at: time || null, p_set_time: true } }, 'Task changed')) done() }}
         />
       )}
@@ -330,11 +330,11 @@ export default function TaskDialog({
       {step === 'delete' && (
         <>
           <Alert kind="warning" title="It goes for good">
-            The task, its history and its comments are removed for you and for {owner}. A copy is kept in the audit log.
+            {manage ? <>The task, its history and its comments are removed for you and for {owner}. A copy is kept in the audit log.</> : 'The task, its history and its comments are removed.'}
           </Alert>
           {error && <Alert kind="error">{error}</Alert>}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button type="button" className="btn-secondary" onClick={() => go('view')}><ArrowLeft className="h-4 w-4" /> Back</button>
+            <button type="button" className="btn-secondary" onClick={() => go(manage ? 'view' : 'edit')}><ArrowLeft className="h-4 w-4" /> Back</button>
             <button
               type="button" className="btn-danger" disabled={act.isPending} data-autofocus
               onClick={async () => { if (await run({ fn: 'task_delete', args: { p_task_id: t.id } }, 'Task deleted')) onClose() }}
@@ -534,8 +534,8 @@ function NoteForm({
   )
 }
 
-function EditForm({ task: t, now, busy, error, onBack, onSubmit }: {
-  task: Task; now: string; busy: boolean; error: string | null; onBack?: () => void; onSubmit: (f: Fields, time: string) => void
+function EditForm({ task: t, now, busy, error, onBack, onDelete, onSubmit }: {
+  task: Task; now: string; busy: boolean; error: string | null; onBack?: () => void; onDelete: () => void; onSubmit: (f: Fields, time: string) => void
 }) {
   const [f, setF] = useState<Fields>({ title: t.title, details: t.details ?? '', due: t.due_on })
   const [time, setTime] = useState(t.due_at?.slice(0, 5) ?? '')
@@ -550,6 +550,12 @@ function EditForm({ task: t, now, busy, error, onBack, onSubmit }: {
         {onBack && <button type="button" className="btn-secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</button>}
         <button type="submit" className="btn-primary" disabled={busy || !!problem}>
           {busy ? <Spinner className="h-4 w-4" /> : <Pencil className="h-4 w-4" />} Save changes
+        </button>
+      </div>
+      {/* A task the person added themselves, still to do, can be deleted by them (mt_0024; the user, 26 Nov). */}
+      <div className="border-t border-ink-100 pt-3">
+        <button type="button" onClick={onDelete} className="btn-press inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-cyrixRed-600 hover:bg-cyrixRed-50">
+          <Trash2 className="h-4 w-4" /> Delete task
         </button>
       </div>
     </form>
