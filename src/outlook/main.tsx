@@ -29,8 +29,8 @@ function readMail(): Promise<Mail | null> {
     Office.onReady(() => {
       const item = Office.context?.mailbox?.item
       if (!item) { clearTimeout(t); resolve(null); return }
-      const from = item.from ? `${item.from.displayName ?? ''}${item.from.emailAddress ? ` <${item.from.emailAddress}>` : ''}`.trim() : ''
-      const when = item.dateTimeCreated ? new Date(item.dateTimeCreated).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }) : ''
+      const from = item.from ? String(item.from.displayName || item.from.emailAddress || '').trim() : ''
+      const when = item.dateTimeCreated ? new Date(item.dateTimeCreated).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : ''
       item.body.getAsync(Office.CoercionType.Text, (r: any) => {
         clearTimeout(t)
         resolve({ subject: item.subject ?? '', from, when, text: r?.status === 'succeeded' ? String(r.value ?? '') : '' })
@@ -39,11 +39,26 @@ function readMail(): Promise<Mail | null> {
   })
 }
 
-/** The mail's own words, tidied and cut to a size the details box keeps, with who sent it and when. */
+/* The user, 26 Nov ("why details like this?"): only the latest message — no earlier mails of the thread, no
+   "Dear …," greeting, no "Regards …" signature — under one short line of who sent it and when. */
+const QUOTED = [/^\s*(From|Sent|De|Von)\s*:/i, /^\s*-{2,}\s*Original Message/i, /^\s*On .+wrote:\s*$/i, /^\s*_{8,}\s*$/]
+const GREETING = /^\s*(dear|hi|hello|hai|hey|respected|good (morning|afternoon|evening))\b[^\n]{0,50}$/i
+const SIGN_OFF = /^\s*(thanks\s*(and|&|n)\s*regards|regards|best regards|warm regards|kind regards|with regards|best wishes|sincerely|yours (truly|faithfully|sincerely))/i
+
+function latestMessage(text: string): string {
+  let lines = text.replace(/\r/g, '').replace(/ /g, ' ').split('\n')
+  const cut = lines.findIndex((l, i) => i > 0 && QUOTED.some(r => r.test(l)))
+  if (cut > 0) lines = lines.slice(0, cut)
+  const first = lines.findIndex(l => l.trim())
+  if (first >= 0 && GREETING.test(lines[first])) lines.splice(first, 1)
+  const sign = lines.findIndex(l => SIGN_OFF.test(l))
+  if (sign >= 0) lines = lines.slice(0, sign)
+  return lines.map(l => l.trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 function detailsOf(m: Mail): string {
-  const body = m.text.replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim()
-  const head = [m.from && `From: ${m.from}`, m.when && `Mail of ${m.when}`].filter(Boolean).join('\n')
-  const all = `${head}\n\n${body}`.trim()
+  const head = [m.from && `From ${m.from}`, m.when].filter(Boolean).join(', ')
+  const all = [head, latestMessage(m.text)].filter(Boolean).join('\n\n')
   return all.length > 3000 ? `${all.slice(0, 3000)}…` : all
 }
 
