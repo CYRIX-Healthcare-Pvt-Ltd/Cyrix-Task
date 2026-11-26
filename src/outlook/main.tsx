@@ -1,6 +1,7 @@
 /*
   Outlook → Make task (the user, 26 Nov: "can we try outlook now"). Outlook shows this page beside an open mail; it
-  reads only that mail (subject, sender, text) through Microsoft's office.js and fills My Task's form. For starts on
+  reads only that mail's subject through Microsoft's office.js for the task name; Details is left for the user
+  to type (26 Nov). For starts on
   Me (task_add); anyone below me can be picked instead (task_assign), the same rules as the app. Sign-in is the
   employee code and password, once, inside the panel. No mailbox password and no copy of the mail is kept.
 */
@@ -19,79 +20,23 @@ import '../index.css'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare const Office: any
 
-type Mail = { subject: string; from: string; when: string; text: string }
+type Mail = { subject: string }
 
-/** The open mail, or null outside Outlook (a plain browser shows an empty form). */
+/** The open mail's subject, or null outside Outlook (a plain browser shows an empty form). */
 function readMail(): Promise<Mail | null> {
   return new Promise((resolve) => {
     if (typeof Office === 'undefined') { resolve(null); return }
     const t = setTimeout(() => resolve(null), 4000)
     Office.onReady(() => {
+      clearTimeout(t)
       const item = Office.context?.mailbox?.item
-      if (!item) { clearTimeout(t); resolve(null); return }
-      const from = item.from ? String(item.from.displayName || item.from.emailAddress || '').trim() : ''
-      const when = item.dateTimeCreated ? new Date(item.dateTimeCreated).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : ''
-      item.body.getAsync(Office.CoercionType.Text, (r: any) => {
-        clearTimeout(t)
-        resolve({ subject: item.subject ?? '', from, when, text: r?.status === 'succeeded' ? String(r.value ?? '') : '' })
-      })
+      resolve(item ? { subject: String(item.subject ?? '') } : null)
     })
   })
 }
 
-/* The user, 26 Nov ("why details like this?"): only the latest message — no earlier mails of the thread, no
-   "Dear …," greeting, no "Regards …" signature — under one short line of who sent it and when. */
-const QUOTED = [/^\s*(From|Sent|De|Von)\s*:/i, /^\s*-{2,}\s*(Original|Forwarded) Message/i, /^\s*On .+wrote:\s*$/i, /^\s*_{8,}\s*$/]
-const GREETING = /^\s*(dear|hi|hello|hai|hey|respected|good (morning|afternoon|evening))\b[^\n]{0,50}$/i
-const SIGN_OFF = /^\s*(thanks\s*(and|&|n)\s*regards|thanks\s*[,.!]?\s*$|thank you\s*[,!]?\s*$|regards|best regards|warm regards|kind regards|with regards|best wishes|sincerely|yours (truly|faithfully|sincerely))/i
-/* Company notices at the foot of a mail (26 Nov: "still same" — a confidentiality notice filled Details). */
-const NOTICE = /(disclaimer|intended recipient|confidential(ity)? notice|confidential or privileged|privileged (and confidential|information)|strictly prohibited|virus(es)? (free|scan)|think before you print|consider the environment)/i
-/* An "external sender" warning some mail servers put on top. */
-const BANNER = /^\s*(\[?external\]?|caution\s*:|warning\s*:)/i
-
-/** One mail of the thread, cleaned: greeting, sign-off and footer notices taken off. */
-function cleanPart(lines: string[]): string {
-  lines = [...lines]
-  while (lines.length && (!lines[0].trim() || BANNER.test(lines[0]))) lines.shift()
-  if (lines.length && GREETING.test(lines[0])) lines.shift()
-  // a short "Thanks" line is the message itself when nothing comes before it
-  const sign = lines.findIndex((l, i) => SIGN_OFF.test(l) && lines.slice(0, i).some(x => x.trim()))
-  if (sign >= 0) lines = lines.slice(0, sign)
-  const notice = lines.findIndex(l => NOTICE.test(l))
-  if (notice >= 0) lines = lines.slice(0, notice)
-  return lines.map(l => l.trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim()
-}
-
-/** The newest words of the mail; a forward with nothing typed above it gives the forwarded mail instead. */
-function latestMessage(text: string): string {
-  const lines = text.replace(/\r/g, '').replace(/ /g, ' ').split('\n')
-  // a quoted mail opens with a marker and its From/Sent/To/Subject lines; those lines stay with it
-  const HEAD = /^\s*(From|Sent|To|Cc|Subject|Date|De|Von|An|Betreff)\s*:/i
-  const parts: { head: boolean; lines: string[] }[] = [{ head: false, lines: [] }]
-  lines.forEach((l, i) => {
-    const cur = parts[parts.length - 1]
-    if (i > 0 && QUOTED.some(r => r.test(l))) {
-      if (!cur.head || cur.lines.some(x => x.trim() && !HEAD.test(x) && !QUOTED.some(r => r.test(x)))) parts.push({ head: true, lines: [] })
-      return
-    }
-    if (cur.head && (HEAD.test(l) || (!l.trim() && !cur.lines.some(x => x.trim())))) return
-    cur.lines.push(l)
-  })
-  for (const p of parts) {
-    const c = cleanPart(p.lines)
-    if (c) return c
-  }
-  return ''
-}
-
 /** The mail's subject without the Re: / Fwd: in front. */
 const titleOf = (s: string) => s.replace(/^\s*((re|fw|fwd|aw|wg)\s*:\s*)+/i, '').trim()
-
-function detailsOf(m: Mail): string {
-  // the user, 26 Nov: "i need mail body only" — no From / date line
-  const all = latestMessage(m.text)
-  return all.length > 3000 ? `${all.slice(0, 3000)}…` : all
-}
 
 function SignIn() {
   const [ecode, setEcode] = useState('')
@@ -124,7 +69,7 @@ function MakeTask({ mail }: { mail: Mail | null }) {
   const [notify, setNotify] = useState(false)
   const [who, setWho] = useState('me')
   const [title, setTitle] = useState(titleOf(mail?.subject ?? ''))
-  const [details, setDetails] = useState(mail ? detailsOf(mail) : '')
+  const [details, setDetails] = useState('')  // the user, 26 Nov: "keep details blank, let user type it"
   const [due, setDue] = useState(today())
   const [crit, setCrit] = useState<Criticality | null>(null)
   const [busy, setBusy] = useState(false)
