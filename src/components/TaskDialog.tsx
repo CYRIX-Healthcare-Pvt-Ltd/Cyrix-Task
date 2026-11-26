@@ -546,16 +546,14 @@ function EditForm({ task: t, now, busy, error, onBack, onDelete, onSubmit }: {
       <TaskFields value={f} onChange={setF} now={now} dueSetBy={t.due_set_by} time={t.due_set_by ? undefined : { value: time, onChange: setTime }} />
       <p className="text-xs text-ink-500">What you change is kept in the task’s history.</p>
       {(error || (problem && f.title.trim())) && <Alert kind="error">{error ?? problem}</Alert>}
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+      {/* One row (the user, 26 Nov: "why 2 rows?"): Delete on the left — a task the person added, still to do (mt_0024). */}
+      <div className="flex items-center justify-end gap-2">
+        <button type="button" onClick={onDelete} aria-label="Delete task" title="Delete task" className="btn-press mr-auto inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium text-cyrixRed-600 hover:bg-cyrixRed-50">
+          <Trash2 className="h-4 w-4" /><span className="hidden sm:inline">Delete</span>
+        </button>
         {onBack && <button type="button" className="btn-secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back</button>}
         <button type="submit" className="btn-primary" disabled={busy || !!problem}>
           {busy ? <Spinner className="h-4 w-4" /> : <Pencil className="h-4 w-4" />} Save changes
-        </button>
-      </div>
-      {/* A task the person added themselves, still to do, can be deleted by them (mt_0024; the user, 26 Nov). */}
-      <div className="border-t border-ink-100 pt-3">
-        <button type="button" onClick={onDelete} className="btn-press inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-cyrixRed-600 hover:bg-cyrixRed-50">
-          <Trash2 className="h-4 w-4" /> Delete task
         </button>
       </div>
     </form>
