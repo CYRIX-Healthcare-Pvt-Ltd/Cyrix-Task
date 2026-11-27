@@ -8,11 +8,12 @@
 import '../lib/safeStorage'
 import React, { useEffect, useMemo, useState, type FormEvent } from 'react'
 import ReactDOM from 'react-dom/client'
-import { BellRing, Check, ExternalLink, ListChecks, LogIn } from 'lucide-react'
+import { BellRing, CalendarPlus, Check, ExternalLink, ListChecks, LogIn, UserPlus } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, ecodeToEmail, friendlyError } from '@/lib/supabase'
 import { CritPicker } from '@/components/Criticality'
-import { today, type Criticality, type Me, type Person } from '@/lib/tasks'
+import { clockNow, dayInSentence, firstName, timeWords, today, type Criticality, type Me, type Person } from '@/lib/tasks'
+import { ACCENT, TaskFields, fieldsProblem, type Fields } from '@/components/TaskForm'
 import { Spinner } from '@/components/ui'
 import { startTheme } from '@/lib/theme'
 import '../index.css'
@@ -63,14 +64,21 @@ function SignIn() {
   )
 }
 
+/**
+ * The app's own add / assign form in the panel (the user, 27 Nov: "Due time also. Same form as in our app"):
+ * task name, description, due date and time (and the scheduled date when it is for someone else), Notify my
+ * manager, how critical, remarks — with the app's own checks.
+ */
 function MakeTask({ mail }: { mail: Mail | null }) {
+  const now = today()
   const [people, setPeople] = useState<Person[]>([])
   const [me, setMe] = useState<Me | null>(null)
   const [notify, setNotify] = useState(false)
   const [who, setWho] = useState('me')
-  const [title, setTitle] = useState(titleOf(mail?.subject ?? ''))
-  const [details, setDetails] = useState('')  // the user, 26 Nov: "keep details blank, let user type it"
-  const [due, setDue] = useState(today())
+  const [f, setF] = useState<Fields>({ title: titleOf(mail?.subject ?? ''), details: '', due: now })  // details left for the user (26 Nov)
+  const [time, setTime] = useState('')
+  const [sched, setSched] = useState(now)
+  const [remarks, setRemarks] = useState('')
   const [crit, setCrit] = useState<Criticality | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -80,19 +88,29 @@ function MakeTask({ mail }: { mail: Mail | null }) {
     supabase.rpc('task_me').then(({ data }) => setMe((data ?? null) as Me | null))
   }, [])
   const sorted = useMemo(() => [...people].sort((a, b) => a.full_name.localeCompare(b.full_name)), [people])
+  const mine = who === 'me'
+  const person = people.find(x => x.id === who)
+  const accent = crit ? ACCENT[crit] : null
+
+  const problem = mine
+    ? fieldsProblem(f, now) ?? (time && f.due === now && time <= clockNow() ? 'That due time has passed.' : null)
+      ?? (f.details.trim() ? null : 'Add a task description.') ?? (crit ? null : 'Choose how critical the task is.')
+    : (!sched ? 'Choose the scheduled date.' : sched < now ? 'The scheduled date cannot be before today.' : null) ?? fieldsProblem(f, now)
+      ?? (f.details.trim() ? null : 'Add a task description.') ?? (f.due < sched ? 'The due date cannot be before the scheduled date.' : null)
+      ?? (crit ? null : 'Choose how critical the task is.') ?? (time && f.due === now && time <= clockNow() ? 'That due time has passed.' : null)
+      ?? (time && f.due === sched && time <= '09:00' ? 'The task reaches them at 9 AM, so the due time must be after 9 AM.' : null)
 
   const submit = async (e: FormEvent) => {
-    e.preventDefault(); setError(null)
-    if (!title.trim()) { setError('Write the task name.'); return }
-    if (!crit) { setError('Pick how critical it is.'); return }
-    setBusy(true)
-    const { error: err } = who === 'me'
-      ? await supabase.rpc('task_add', { p_title: title.trim(), p_details: details, p_due_on: due, p_criticality: crit, p_due_at: null, p_notify_manager: notify && !!me?.manager_id })
-      : await supabase.rpc('task_assign', { p_people: [who], p_title: title.trim(), p_details: details, p_due_on: due, p_criticality: crit, p_remarks: '', p_release_on: today(), p_due_at: null })
+    e.preventDefault()
+    if (problem || !crit) { setError(problem); return }
+    setError(null); setBusy(true)
+    const { error: err } = mine
+      ? await supabase.rpc('task_add', { p_title: f.title.trim(), p_details: f.details, p_due_on: f.due, p_criticality: crit, p_due_at: time || null, p_notify_manager: notify && !!me?.manager_id })
+      : await supabase.rpc('task_assign', { p_people: [who], p_title: f.title.trim(), p_details: f.details, p_due_on: f.due, p_criticality: crit, p_remarks: remarks, p_release_on: sched, p_due_at: time || null })
     setBusy(false)
     if (err) { setError(friendlyError(err)); return }
-    const p = people.find(x => x.id === who)
-    setDone(p ? `Task given to ${p.full_name}.` : 'Task added to your list.')
+    const by = time ? ` by ${timeWords(time)}` : ''
+    setDone(person ? `Assigned to ${firstName(person.full_name)}, due ${dayInSentence(f.due, now)}${by}.` : `Task added for ${dayInSentence(f.due, now)}${by}.`)
   }
 
   if (done) {
@@ -101,27 +119,23 @@ function MakeTask({ mail }: { mail: Mail | null }) {
         <Check className="mx-auto h-8 w-8 text-emerald-600" />
         <p className="text-sm font-semibold text-ink-900">{done}</p>
         <a href="https://app.cyrix.in/tasks/" target="_blank" rel="noreferrer" className="btn-secondary inline-flex"><ExternalLink className="h-4 w-4" /> Open My Task</a>
-        <button type="button" className="block w-full text-xs text-ink-500 underline" onClick={() => { setDone(null); setCrit(null); setWho('me'); setNotify(false) }}>Make another</button>
+        <button type="button" className="block w-full text-xs text-ink-500 underline" onClick={() => { setDone(null); setCrit(null); setWho('me'); setNotify(false); setTime(''); setRemarks(''); setSched(now); setF({ title: '', details: '', due: now }) }}>Make another</button>
       </div>
     )
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={submit} className="space-y-4">
       <label className="block"><span className="label">For</span>
-        <select className="input mt-1" value={who} onChange={e => setWho(e.target.value)}>
+        <select className="input" value={who} onChange={e => setWho(e.target.value)}>
           <option value="me">Me</option>
           {sorted.map(p => <option key={p.id} value={p.id}>{p.full_name} ({p.ecode})</option>)}
         </select></label>
-      <label className="block"><span className="label">Task name</span>
-        <input className="input mt-1" value={title} onChange={e => setTitle(e.target.value)} placeholder="What needs doing" /></label>
-      <label className="block"><span className="label">Details</span>
-        <textarea className="input mt-1 min-h-28 text-xs" value={details} onChange={e => setDetails(e.target.value)} /></label>
-      <label className="block"><span className="label">Due</span>
-        <input className="input mt-1" type="date" value={due} min={today()} onChange={e => setDue(e.target.value)} /></label>
-      {who === 'me' && me?.manager_id && (
+      <TaskFields value={f} onChange={setF} now={now} time={{ value: time, onChange: setTime, accent }}
+        scheduled={mine ? undefined : { value: sched, onChange: setSched }} />
+      {mine && me?.manager_id && (
         <button type="button" role="switch" aria-checked={notify} onClick={() => setNotify(v => !v)}
-          className="flex w-full items-center gap-3 rounded-xl border border-ink-200 p-3 text-left hover:bg-ink-50">
+          className="btn-press flex w-full items-center gap-3 rounded-xl border border-ink-200 p-3 text-left hover:bg-ink-50">
           <BellRing className={notify ? 'h-5 w-5 shrink-0 text-teal-600' : 'h-5 w-5 shrink-0 text-ink-400'} aria-hidden />
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold text-ink-900">Notify my manager</span>
@@ -132,11 +146,22 @@ function MakeTask({ mail }: { mail: Mail | null }) {
           </span>
         </button>
       )}
-      <div><span className="label" id="ol-crit">Criticality</span><div className="mt-1"><CritPicker value={crit} onChange={setCrit} labelledBy="ol-crit" /></div></div>
-      <button type="submit" className="btn-primary w-full justify-center" disabled={busy}>
-        {busy ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />} {who === 'me' ? 'Add task' : 'Assign'}
-      </button>
+      <div>
+        <span className="label" id="ol-crit">How critical</span>
+        <CritPicker value={crit} onChange={setCrit} labelledBy="ol-crit" />
+      </div>
+      {!mine && (
+        <label className="block">
+          <span className="label">Remarks</span>
+          <textarea className="input min-h-[72px] resize-y" value={remarks} onChange={e => setRemarks(e.target.value)} maxLength={2000} rows={2} placeholder="Anything they should keep in mind" />
+        </label>
+      )}
       {error && <p className="text-xs text-red-600" role="alert">{error}</p>}
+      <button type="submit" className="btn-primary w-full justify-center transition-colors duration-300" disabled={busy || !!problem}
+        style={mine && accent && !problem ? { background: accent, color: crit === 'moderate' ? 'rgb(40 24 0)' : '#fff', borderColor: accent } : undefined}>
+        {busy ? <Spinner className="h-4 w-4" /> : mine ? <CalendarPlus className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+        {mine ? 'Add task' : person ? `Assign to ${firstName(person.full_name)}` : 'Assign'}
+      </button>
     </form>
   )
 }
