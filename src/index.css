@@ -1611,3 +1611,9 @@
   0%, 100% { transform: rotate(0); } 15% { transform: rotate(18deg); } 30% { transform: rotate(-16deg); }
   45% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } 75% { transform: rotate(4deg); }
 }
+
+/* The field a refused Add / Assign names (27 Nov): outlined red and nudged once. */
+.field-missing { border-radius: 0.75rem; box-shadow: 0 0 0 2px rgb(239 68 68); animation: field-nudge 0.35s ease-in-out; }
+input.field-missing, textarea.field-missing { border-color: rgb(239 68 68) !important; }
+@keyframes field-nudge { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@media (prefers-reduced-motion: reduce) { .field-missing { animation: none; } }

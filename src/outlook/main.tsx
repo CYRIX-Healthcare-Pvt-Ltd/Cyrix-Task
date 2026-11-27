@@ -13,7 +13,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase, ecodeToEmail, friendlyError } from '@/lib/supabase'
 import { CritPicker } from '@/components/Criticality'
 import { clockNow, dayInSentence, firstName, timeWords, today, type Criticality, type Me, type Person } from '@/lib/tasks'
-import { ACCENT, TaskFields, fieldsProblem, type Fields } from '@/components/TaskForm'
+import { ACCENT, TaskFields, fieldsProblem, pointAt, type Fields } from '@/components/TaskForm'
 import { Spinner } from '@/components/ui'
 import { startTheme } from '@/lib/theme'
 import '../index.css'
@@ -100,6 +100,7 @@ function MakeTask({ mail }: { mail: Mail | null }) {
   const [crit, setCrit] = useState<Criticality | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tried, setTried] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   useEffect(() => {
     supabase.rpc('task_people').then(({ data }) => setPeople((data ?? []) as Person[]))
@@ -144,7 +145,7 @@ function MakeTask({ mail }: { mail: Mail | null }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    if (problem || !crit) { setError(problem); return }
+    if (problem || !crit) { setError(null); setTried(true); pointAt(e.currentTarget as HTMLElement, problem); return }
     setError(null); setBusy(true)
     const p_mail = mail?.link ? { link: mail.link, subject: mail.subject, from: mail.from } : null
     const { error: err } = mine
@@ -204,7 +205,7 @@ function MakeTask({ mail }: { mail: Mail | null }) {
           </span>
         </button>
       )}
-      <div>
+      <div data-field="crit">
         <span className="label" id="ol-crit">How critical</span>
         <CritPicker value={crit} onChange={setCrit} labelledBy="ol-crit" />
       </div>
@@ -214,8 +215,8 @@ function MakeTask({ mail }: { mail: Mail | null }) {
           <textarea className="input min-h-[72px] resize-y" value={remarks} onChange={e => setRemarks(e.target.value)} maxLength={2000} rows={2} placeholder="Anything they should keep in mind" />
         </label>
       )}
-      {error && <p className="text-xs text-red-600" role="alert">{error}</p>}
-      <button type="submit" className="btn-primary w-full justify-center transition-colors duration-300" disabled={busy || !!problem}
+      {(error || (tried && problem)) && <p className="text-xs text-red-600" role="alert">{error ?? problem}</p>}
+      <button type="submit" className="btn-primary w-full justify-center transition-colors duration-300" disabled={busy}
         style={mine && accent && !problem ? { background: accent, color: crit === 'moderate' ? 'rgb(40 24 0)' : '#fff', borderColor: accent } : undefined}>
         {busy ? <Spinner className="h-4 w-4" /> : mine ? <CalendarPlus className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
         {mine ? 'Add task' : person ? `Assign to ${firstName(person.full_name)}` : 'Assign'}

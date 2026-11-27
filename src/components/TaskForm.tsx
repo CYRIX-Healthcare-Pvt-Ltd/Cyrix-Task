@@ -20,6 +20,25 @@ export function fieldsProblem(f: Fields, now: string, dueUnchanged = false): str
   return dueUnchanged ? null : dueProblem(f.due, now)
 }
 
+/**
+ * A press on Add / Assign with something missing (the user, 27 Nov: "when button is clicked user should know which
+ * field is missing"): the button stays pressable; the field the message names is scrolled to, focused and outlined
+ * red for a moment. Fields carry data-field.
+ */
+export function pointAt(form: HTMLElement | null, problem: string | null) {
+  if (!form || !problem) return
+  const p = problem.toLowerCase()
+  const key = p.includes('name') ? 'title' : p.includes('description') ? 'details' : p.includes('due time') ? 'time'
+    : p.includes('due date') ? 'due' : p.includes('scheduled') ? 'sched' : p.includes('critical') ? 'crit' : p.includes('who') ? 'people' : null
+  const el = key ? form.querySelector<HTMLElement>(`[data-field="${key}"]`) : null
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  const target = el.matches('input,textarea,select,button') ? el : el.querySelector<HTMLElement>('input,textarea,select,button')
+  target?.focus({ preventScroll: true })
+  el.classList.remove('field-missing'); void el.offsetWidth; el.classList.add('field-missing')
+  window.setTimeout(() => el.classList.remove('field-missing'), 2600)
+}
+
 /** What the database will refuse of a new due date. */
 export function dueProblem(due: string, now: string): string | null {
   if (!due) return 'Choose the due date.'
@@ -57,6 +76,7 @@ export function TaskFields({ value, onChange, now, dueSetBy = null, scheduled, t
           onChange={e => set('title')(e.target.value)}
           maxLength={200}
           placeholder="What is to be done"
+          data-field="title"
           data-autofocus
           required
         />
@@ -70,6 +90,7 @@ export function TaskFields({ value, onChange, now, dueSetBy = null, scheduled, t
           maxLength={4000}
           rows={3}
           placeholder="Anything that helps — where, for whom, what is needed"
+          data-field="details"
         />
       </label>
       {scheduled
@@ -80,14 +101,14 @@ export function TaskFields({ value, onChange, now, dueSetBy = null, scheduled, t
               <DueField label="Scheduled date" id="sched-words" value={scheduled.value} now={now} words={false}
                 onChange={d => { scheduled.onChange(d); if (d && value.due < d) set('due')(d) }} />
               <DueField value={value.due} onChange={set('due')} now={now} min={scheduled.value || now} words={false} />
-              {time && <TimePicker value={time.value} onChange={time.onChange} accent={time.accent} />}
+              {time && <div data-field="time" className="min-w-0"><TimePicker value={time.value} onChange={time.onChange} accent={time.accent} /></div>}
             </div>
           </>
         : time
         ? <div>
             <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-3">
               <DueField value={value.due} onChange={set('due')} now={now} words={false} />
-              <TimePicker value={time.value} onChange={time.onChange} accent={time.accent} />
+              <div data-field="time" className="min-w-0"><TimePicker value={time.value} onChange={time.onChange} accent={time.accent} /></div>
             </div>
             {value.due && <p id="due-words" className="mt-1.5 text-xs font-medium text-ink-600">{dueWords(value.due, now)}{time.value ? ` · by ${timeWords(time.value)}` : ''}</p>}
           </div>
@@ -115,6 +136,7 @@ export function DueField({ value, onChange, now, setBy = null, autoFocus = false
           min={min}
           max={addDays(now, 366)}
           onChange={e => onChange(e.target.value)}
+          data-field={label === 'Scheduled date' ? 'sched' : 'due'}
           aria-describedby={id}
           disabled={!!setBy}
           required
@@ -161,6 +183,7 @@ export function AddTask({ due, onClose, onAdded }: { due: string; onClose: () =>
   const keepAndClose = () => { writeDraft(typed ? { f, crit, time, notify } : null); onClose() }
   const cancel = () => { writeDraft(null); onClose() }
   const [error, setError] = useState<string | null>(null)
+  const [tried, setTried] = useState(false)
   const act = useTaskAction()
   const { data: me } = useMe()
   const problem = fieldsProblem(f, now) ?? (time && f.due === now && time <= clockNow() ? 'That due time has passed.' : null)
@@ -169,7 +192,7 @@ export function AddTask({ due, onClose, onAdded }: { due: string; onClose: () =>
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    if (problem || !crit) { setError(problem); return }
+    if (problem || !crit) { setError(null); setTried(true); pointAt(e.currentTarget as HTMLElement, problem); return }
     setError(null)
     try {
       await act.mutateAsync({ fn: 'task_add', args: { p_title: f.title, p_details: f.details, p_due_on: f.due, p_criticality: crit, p_due_at: time || null, p_notify_manager: notify && !!me?.manager_id } })
@@ -206,14 +229,14 @@ export function AddTask({ due, onClose, onAdded }: { due: string; onClose: () =>
             </span>
           </button>
         )}
-        <div>
+        <div data-field="crit">
           <span className="label" id="crit-label">How critical</span>
           <CritPicker value={crit} onChange={setCrit} labelledBy="crit-label" />
         </div>
-        {error && <Alert kind="error">{error}</Alert>}
+        {(error || (tried && problem)) && <Alert kind="error">{error ?? problem}</Alert>}
         <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
           <button type="button" className="btn-secondary" onClick={cancel}>Cancel</button>
-          <button type="submit" className="btn-primary transition-colors duration-300" disabled={act.isPending || !!problem}
+          <button type="submit" className="btn-primary transition-colors duration-300" disabled={act.isPending}
             style={accent && !problem ? { background: accent, color: crit === 'moderate' ? 'rgb(40 24 0)' : '#fff', borderColor: accent } : undefined}>
             {act.isPending ? <Spinner className="h-4 w-4" /> : <CalendarPlus className="h-4 w-4" />} Add task
           </button>

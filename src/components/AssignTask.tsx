@@ -7,7 +7,7 @@ import Avatar from '@/components/Avatar'
 import { CritPicker } from '@/components/Criticality'
 import { Alert, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
-import { TaskFields, fieldsProblem, type Fields } from '@/components/TaskForm'
+import { TaskFields, fieldsProblem, pointAt, type Fields } from '@/components/TaskForm'
 import { clockNow, dayInSentence, firstName, timeWords, today, useTaskAction, type Criticality, type Person } from '@/lib/tasks'
 
 /**
@@ -43,6 +43,7 @@ export default function AssignTask({ people, preselect, onClose }: {
   const [crit, setCrit] = useState<Criticality | null>(null)
   const [remarks, setRemarks] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [tried, setTried] = useState(false)
   const act = useTaskAction()
 
   const [opened, setOpened] = useState<Set<string>>(() => new Set())
@@ -73,7 +74,7 @@ export default function AssignTask({ people, preselect, onClose }: {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    if (problem || !crit) { setError(problem); return }
+    if (problem || !crit) { setError(null); setTried(true); pointAt(e.currentTarget as HTMLElement, problem); return }
     setError(null)
     try {
       const n = await act.mutateAsync({ fn: 'task_assign', args: {
@@ -90,7 +91,7 @@ export default function AssignTask({ people, preselect, onClose }: {
   return (
     <Dialog title="Assign a task" icon={<IconChip icon={UserPlus} tone="teal" />} onClose={onClose} wide>
       <form onSubmit={submit} className="space-y-4">
-        <div ref={listBox}>
+        <div ref={listBox} data-field="people">
           <div className="flex items-baseline justify-between gap-2">
             <span className="label !mb-0">Assign to</span>
             <span className="text-xs font-medium text-ink-500">{chosen.size} of {people.length} chosen</span>
@@ -154,10 +155,10 @@ export default function AssignTask({ people, preselect, onClose }: {
           <textarea className="input min-h-[72px] resize-y" value={remarks} onChange={e => setRemarks(e.target.value)} maxLength={2000} rows={2} placeholder="Anything they should keep in mind" />
         </label>
 
-        {error && <Alert kind="error">{error}</Alert>}
+        {(error || (tried && problem)) && <Alert kind="error">{error ?? problem}</Alert>}
         <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn-primary" disabled={act.isPending || !!problem}>
+          <button type="submit" className="btn-primary" disabled={act.isPending}>
             {act.isPending ? <Spinner className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
             {chosen.size <= 1 ? (one ? `Assign to ${firstName(one.full_name)}` : 'Assign') : `Assign to ${chosen.size} people`}
           </button>
