@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  ArrowLeft, BadgeCheck, BellRing, CalendarClock, CheckCircle2, Circle, Clock3, MessageSquare, Gauge, Pencil, Plus, RotateCcw, Send, Trash2, Undo2, UserPlus, TrendingUp,
+  ArrowLeft, BadgeCheck, BellRing, CalendarClock, CheckCircle2, Circle, Clock3, ExternalLink, Mail, MessageSquare, Gauge, Pencil, Plus, RotateCcw, Send, Trash2, Undo2, UserPlus, TrendingUp,
   type LucideIcon,
 } from 'lucide-react'
 import DropPick from '@/components/DropPick'
@@ -13,6 +13,7 @@ import { toast } from '@/components/Toast'
 import { DueField, TaskFields, dueProblem, fieldsProblem, type Fields } from '@/components/TaskForm'
 import type { Opening } from '@/components/TaskRow'
 import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
 import { TONE_CLASS, type Tone } from '@/lib/tones'
 import { dateTime } from '@/lib/when'
 import {
@@ -153,24 +154,24 @@ export default function TaskDialog({
             {look === 'overdue' && <Chip tone="red">{plural(late, 'day')} overdue</Chip>}
             {t.status !== 'open' && late > 0 && <Chip tone="orange">Done {plural(late, 'day')} late</Chip>}
             {t.status === 'open' && t.reminders > 0 && <Chip tone="violet"><BellRing className="h-3 w-3" aria-hidden /> Reminded {plural(t.reminders, 'time')}</Chip>}
+            {/* Notify my manager (mt_0016), at the end of this line rather than a row of its own (the user, 27 Nov).
+                On a completed task too: turning it on tells the manager it was completed (mt_0021). */}
+            {!assigned && (manage || manager) && (manage ? !!t.notify_manager : true) && (
+              <button type="button" role="switch" aria-checked={!!t.notify_manager} disabled={act.isPending}
+                onClick={() => run({ fn: 'task_set_notify', args: { p_task_id: t.id, p_on: !t.notify_manager } },
+                  t.notify_manager ? (manage ? `You will not be told about ${owner}’s task` : `${manager} will not be told`) : t.status === 'open' ? `${manager} will be told` : `${manager} is told you completed it`)}
+                className="btn-press ml-auto flex items-center gap-2 rounded-full py-1 pl-2 pr-1 text-xs font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-60">
+                <BellRing className={t.notify_manager ? 'h-4 w-4 shrink-0 text-teal-600' : 'h-4 w-4 shrink-0 text-ink-400'} aria-hidden />
+                {manage ? `Notify me` : `Notify ${manager}`}
+                <span aria-hidden className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${t.notify_manager ? 'bg-teal-600' : 'bg-ink-300'}`}>
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-[left] duration-200 ${t.notify_manager ? 'left-[18px]' : 'left-0.5'}`} />
+                </span>
+              </button>
+            )}
           </div>
 
           {manage && <p className="text-sm text-ink-600">{assigned ? 'Assigned to' : 'Entered by'} <span className="font-semibold text-ink-900">{t.employee_name}</span> · {t.employee_ecode}</p>}
 
-          {/* Notify my manager (mt_0016): the person turns it on; they or their manager can turn it off again (mt_0017).
-              On a completed task too: turning it on tells the manager it was completed (mt_0021; the user, 20 Nov). */}
-          {!assigned && (manage || manager) && (manage ? !!t.notify_manager : true) && (
-            <button type="button" role="switch" aria-checked={!!t.notify_manager} disabled={act.isPending}
-              onClick={() => run({ fn: 'task_set_notify', args: { p_task_id: t.id, p_on: !t.notify_manager } },
-                t.notify_manager ? (manage ? `You will not be told about ${owner}’s task` : `${manager} will not be told`) : t.status === 'open' ? `${manager} will be told` : `${manager} is told you completed it`)}
-              className="btn-press flex w-full items-center gap-3 rounded-xl border border-ink-200 p-3 text-left hover:bg-ink-50 disabled:opacity-60">
-              <BellRing className={t.notify_manager ? 'h-5 w-5 shrink-0 text-teal-600' : 'h-5 w-5 shrink-0 text-ink-400'} aria-hidden />
-              <span className="min-w-0 flex-1 text-sm font-semibold text-ink-900">{manage ? `Notify me about ${owner}’s task` : `Notify ${manager}`}</span>
-              <span aria-hidden className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${t.notify_manager ? 'bg-teal-600' : 'bg-ink-300'}`}>
-                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left] duration-200 ${t.notify_manager ? 'left-[22px]' : 'left-0.5'}`} />
-              </span>
-            </button>
-          )}
           {/* Given by the manager: who, and their remarks (mt_0007). */}
           {assigned && (
             <div className="rounded-xl border border-teal-200 bg-teal-50 px-3.5 py-2.5">
@@ -178,6 +179,8 @@ export default function TaskDialog({
               {t.remarks && <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink-800">{t.remarks}</p>}
             </div>
           )}
+
+          <FromMail taskId={t.id} />
 
           <CriticalityRow task={t} manage={manage} owner={owner} />
           <DueRow task={t} manage={manage} overdue={look === 'overdue'} now={now} onChange={() => go('due')} />
@@ -775,5 +778,36 @@ function EventLine({ e, mine }: { e: TaskEvent; mine: boolean }) {
         )}
       </div>
     </li>
+  )
+}
+
+/**
+ * The mail a task was made from in Outlook (mt_0025; the user, 27 Nov): subject and sender for anyone who sees the
+ * task, and Open mail for its maker — the link opens only in the mailbox it came from.
+ */
+function FromMail({ taskId }: { taskId: string }) {
+  const [mail, setMail] = useState<{ subject: string | null; sender: string | null; link: string | null } | null>(null)
+  useEffect(() => {
+    let live = true
+    setMail(null)
+    supabase.rpc('task_mail', { p_task_id: taskId }).then(({ data }) => {
+      if (live) setMail(((data ?? []) as Array<{ subject: string | null; sender: string | null; link: string | null }>)[0] ?? null)
+    })
+    return () => { live = false }
+  }, [taskId])
+  if (!mail) return null
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2.5 dark:border-sky-900 dark:bg-sky-950/40">
+      <Mail className="h-5 w-5 shrink-0 text-sky-600" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-ink-900">{mail.subject || '(no subject)'}</p>
+        {mail.sender && <p className="truncate text-xs text-ink-500">From {mail.sender}</p>}
+      </div>
+      {mail.link && (
+        <a href={mail.link} target="_blank" rel="noreferrer" className="btn-secondary shrink-0 !px-3 !py-1.5 text-xs">
+          <ExternalLink className="h-3.5 w-3.5" aria-hidden /> Open mail
+        </a>
+      )}
+    </div>
   )
 }

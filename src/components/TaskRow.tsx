@@ -1,3 +1,4 @@
+import { MailMark } from '@/components/MailMark'
 import clsx from 'clsx'
 import { BellRing, Check, CheckCircle2, Circle, Clock3, MessageSquare, RotateCcw, Undo2, UserPlus } from 'lucide-react'
 import Avatar from '@/components/Avatar'
@@ -87,9 +88,11 @@ export default function TaskRow({
         >
           <span className="line-clamp-2 break-words">{t.title}</span>
         </button>
+
         {t.details && <p className="mt-0.5 line-clamp-1 break-words text-sm text-ink-500">{t.details}</p>}
 
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {(t.mail_subject || t.mail_link) && <span className="relative z-[1]"><MailMark task={t} /></span>}
           {newWord && (
             <span className={clsx(chip, TONE_CLASS.violet)}>
               <span className="unseen-dot h-1.5 w-1.5 rounded-full bg-violet-500" aria-hidden />

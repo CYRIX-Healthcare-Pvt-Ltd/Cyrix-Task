@@ -53,6 +53,9 @@ export interface Task {
   remarks: string | null
   /** How far along a task still to do is: 0, 25, 50 or 75; completing it is 100. */
   progress: number
+  /** Made from a mail in Outlook (mt_0025): its subject; the link only for the task's maker. */
+  mail_subject?: string | null
+  mail_link?: string | null
 }
 
 /** The steps of progress, as the person picks them (the user, 24 Oct: "if selected in progress we can show 50%"). */

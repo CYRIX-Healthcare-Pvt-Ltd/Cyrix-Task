@@ -8,7 +8,7 @@
 import '../lib/safeStorage'
 import React, { useEffect, useMemo, useState, type FormEvent } from 'react'
 import ReactDOM from 'react-dom/client'
-import { BellRing, CalendarPlus, Check, ExternalLink, ListChecks, LogIn, UserPlus } from 'lucide-react'
+import { BellRing, CalendarPlus, Check, ExternalLink, ListChecks, LogIn, Mail as MailIcon, UserPlus } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, ecodeToEmail, friendlyError } from '@/lib/supabase'
 import { CritPicker } from '@/components/Criticality'
@@ -21,9 +21,23 @@ import '../index.css'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare const Office: any
 
-type Mail = { subject: string }
+type Mail = { subject: string; from: string; link: string | null }
 
-/** The open mail's subject, or null outside Outlook (a plain browser shows an empty form). */
+/**
+ * The mail's own Outlook web link, as Microsoft Graph's webLink writes it (mt_0025; the user, 27 Nov: "if i click that
+ * in cyra app, it should redirect to that mail"). It opens only in this mailbox.
+ */
+function linkOf(item: any): string | null {
+  try {
+    const id = item?.itemId
+    if (!id) return null
+    const mb = Office.context.mailbox
+    const rest = mb.convertToRestId ? mb.convertToRestId(id, Office.MailboxEnums.RestVersion.v2_0) : id
+    return `https://outlook.office365.com/owa/?ItemID=${encodeURIComponent(rest)}&exvsurl=1&viewmodel=ReadMessageItem`
+  } catch { return null }
+}
+
+/** The open mail's subject, sender and link, or null outside Outlook (a plain browser shows an empty form). */
 function readMail(): Promise<Mail | null> {
   return new Promise((resolve) => {
     if (typeof Office === 'undefined') { resolve(null); return }
@@ -31,7 +45,11 @@ function readMail(): Promise<Mail | null> {
     Office.onReady(() => {
       clearTimeout(t)
       const item = Office.context?.mailbox?.item
-      resolve(item ? { subject: String(item.subject ?? '') } : null)
+      resolve(item ? {
+        subject: String(item.subject ?? ''),
+        from: String(item.from?.displayName || item.from?.emailAddress || ''),
+        link: linkOf(item),
+      } : null)
     })
   })
 }
@@ -87,6 +105,30 @@ function MakeTask({ mail }: { mail: Mail | null }) {
     supabase.rpc('task_people').then(({ data }) => setPeople((data ?? []) as Person[]))
     supabase.rpc('task_me').then(({ data }) => setMe((data ?? null) as Me | null))
   }, [])
+  // A task made before mails were kept (mt_0025) with this mail's subject as its name: Link puts the mail on it
+  // (the user, 27 Nov: "for already added, get the link and add it").
+  const [match, setMatch] = useState<{ id: string; title: string; who: string | null }[]>([])
+  const [linked, setLinked] = useState<{ bad?: boolean; text: string } | null>(null)
+  useEffect(() => {
+    const want = titleOf(mail?.subject ?? '').toLowerCase()
+    if (!mail?.link || !want) return
+    const from = '2000-01-01'; const to = '2100-12-31'
+    Promise.all([
+      supabase.rpc('task_list', { p_from: from, p_to: to }),
+      supabase.rpc('task_list', { p_from: from, p_to: to, p_team: true }),
+    ]).then(([mineRes, teamRes]) => {
+      const seen = new Set<string>()
+      const all = [...((mineRes.data ?? []) as any[]), ...((teamRes.data ?? []) as any[])]
+        .filter(t => !t.mail_subject && t.status === 'open' && String(t.title).trim().toLowerCase() === want && !seen.has(t.id) && seen.add(t.id))
+      setMatch(all.map(t => ({ id: t.id, title: t.title, who: t.assigned_by_name ? t.employee_name : null })))
+    })
+  }, [mail])
+  const linkTo = async (id: string) => {
+    if (!mail?.link) return
+    const { error: err } = await supabase.rpc('task_link_mail', { p_task_id: id, p_mail: { link: mail.link, subject: mail.subject, from: mail.from } })
+    if (err) { setLinked({ bad: true, text: friendlyError(err) }); return }
+    setMatch(m => m.filter(x => x.id !== id)); setLinked({ text: 'Mail linked to the task.' })
+  }
   const sorted = useMemo(() => [...people].sort((a, b) => a.full_name.localeCompare(b.full_name)), [people])
   const mine = who === 'me'
   const person = people.find(x => x.id === who)
@@ -104,9 +146,10 @@ function MakeTask({ mail }: { mail: Mail | null }) {
     e.preventDefault()
     if (problem || !crit) { setError(problem); return }
     setError(null); setBusy(true)
+    const p_mail = mail?.link ? { link: mail.link, subject: mail.subject, from: mail.from } : null
     const { error: err } = mine
-      ? await supabase.rpc('task_add', { p_title: f.title.trim(), p_details: f.details, p_due_on: f.due, p_criticality: crit, p_due_at: time || null, p_notify_manager: notify && !!me?.manager_id })
-      : await supabase.rpc('task_assign', { p_people: [who], p_title: f.title.trim(), p_details: f.details, p_due_on: f.due, p_criticality: crit, p_remarks: remarks, p_release_on: sched, p_due_at: time || null })
+      ? await supabase.rpc('task_add', { p_title: f.title.trim(), p_details: f.details, p_due_on: f.due, p_criticality: crit, p_due_at: time || null, p_notify_manager: notify && !!me?.manager_id, p_mail })
+      : await supabase.rpc('task_assign', { p_people: [who], p_title: f.title.trim(), p_details: f.details, p_due_on: f.due, p_criticality: crit, p_remarks: remarks, p_release_on: sched, p_due_at: time || null, p_mail })
     setBusy(false)
     if (err) { setError(friendlyError(err)); return }
     const by = time ? ` by ${timeWords(time)}` : ''
@@ -126,6 +169,21 @@ function MakeTask({ mail }: { mail: Mail | null }) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
+      {match.map(m => (
+        <div key={m.id} className="flex items-center gap-2 rounded-xl border border-sky-200 p-2.5 dark:border-sky-900">
+          <MailIcon className="h-4 w-4 shrink-0 text-sky-600" aria-hidden />
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink-900">{m.title}{m.who ? ` · ${firstName(m.who)}` : ''}</span>
+          <button type="button" className="btn-secondary shrink-0 !px-3 !py-1.5 text-xs" onClick={() => linkTo(m.id)}>Link to task</button>
+        </div>
+      ))}
+      {linked && (linked.bad
+        ? <p className="text-xs text-red-600" role="alert">{linked.text}</p>
+        : <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700"><Check className="h-4 w-4" aria-hidden />{linked.text}</p>)}
+      {mail?.link && (
+        <p className="flex items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+          <MailIcon className="h-4 w-4 shrink-0" aria-hidden /><span className="truncate">Linked to this mail{mail.from ? ` · ${mail.from}` : ''}</span>
+        </p>
+      )}
       <label className="block"><span className="label">For</span>
         <select className="input" value={who} onChange={e => setWho(e.target.value)}>
           <option value="me">Me</option>

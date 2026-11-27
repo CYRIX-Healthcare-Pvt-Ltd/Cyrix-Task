@@ -1,3 +1,4 @@
+import { MailMark } from '@/components/MailMark'
 import clsx from 'clsx'
 import { BellRing, Check, UserPlus } from 'lucide-react'
 import { CritPill } from '@/components/Criticality'
@@ -73,6 +74,7 @@ export default function TaskTable({ tasks, manage, now, managerName, onOpen }: {
                     <span className="flex max-w-[12rem] items-center gap-1.5">
                       {t.unseen > 0 && <span className="unseen-dot h-2 w-2 shrink-0 rounded-full bg-violet-500" aria-label="New" />}
                       <span className={clsx('min-w-0 truncate font-semibold', t.status === 'approved' ? 'text-ink-600' : 'text-ink-900')}>{t.title}</span>
+                      <MailMark task={t} />
                     </span>
                   </td>
                   {/* The description takes what room is left and ends in … : the table fits the page (the user, 18 Nov). */}
